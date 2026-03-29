@@ -37,6 +37,7 @@ func main() {
 	// Root command flags.
 	var (
 		providerFlag   string
+		modelFlag      string
 		jsonFlag       bool
 		prettyFlag     bool
 		debug          bool
@@ -84,6 +85,7 @@ func main() {
 			if err != nil {
 				return err
 			}
+			results = filterByModel(results, modelFlag)
 
 			switch mode {
 			case cli.OutputJSON:
@@ -97,6 +99,7 @@ func main() {
 	}
 
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, gemini)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. gemini-3-flash-preview)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "force JSON output")
 	rootCmd.Flags().BoolVar(&prettyFlag, "pretty", false, "force TUI output")
 	rootCmd.Flags().IntVar(&refreshMinutes, "refresh-minutes", 0, "override TUI auto-refresh interval in minutes")
@@ -107,6 +110,27 @@ func main() {
 	if err := fang.Execute(ctx, rootCmd, fang.WithVersion(version.String())); err != nil {
 		os.Exit(1)
 	}
+}
+
+// filterByModel filters each QuotaResult's Windows to those whose Name matches
+// model exactly. A blank model returns results unchanged. Non-matching results
+// keep their other fields intact but have an empty (non-nil) Windows slice.
+func filterByModel(results []provider.QuotaResult, model string) []provider.QuotaResult {
+	if model == "" {
+		return results
+	}
+	out := make([]provider.QuotaResult, len(results))
+	for i, r := range results {
+		filtered := make([]provider.Window, 0)
+		for _, w := range r.Windows {
+			if w.Name == model {
+				filtered = append(filtered, w)
+			}
+		}
+		r.Windows = filtered
+		out[i] = r
+	}
+	return out
 }
 
 // fetchResults queries the selected provider(s) and collects results.
