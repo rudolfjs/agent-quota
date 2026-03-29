@@ -2,16 +2,16 @@ pre-commit:
   parallel: true
   commands:
     format:
-      glob: "*.go"
+      glob: "**/*.go"
       run: >
         sh -c 'if [ "$#" -eq 0 ]; then exit 0; fi;
         files=$(gofmt -l "$@");
         if [ -n "$files" ]; then printf "%s\n" "$files"; exit 1; fi' sh {staged_files}
     vet:
-      glob: "*.go"
+      glob: "**/*.go"
       run: go vet ./...
     lint:
-      glob: "*.go"
+      glob: "**/*.go"
       run: golangci-lint run ./...
 
 commit-msg:
