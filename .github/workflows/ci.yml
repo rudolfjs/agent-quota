@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  go-checks:
+    name: Go checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: |
+          files=$(find . -type f -name '*.go' -print0 | xargs -0 gofmt -l)
+          if [ -n "$files" ]; then
+            printf '%s\n' "$files"
+            exit 1
+          fi
+
+      - name: Check installer script syntax
+        run: sh -n install.sh
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
+
+      - name: Run tests
+        run: go test -race -count=1 ./...
+
+      - name: Build CLI
+        run: go build -o /tmp/agent-quota ./cmd/agent-quota/
+
+      - name: Verify installer script is executable
+        run: test -x install.sh
+
+  lefthook:
+    name: Lefthook
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install tooling
+        run: |
+          go install github.com/evilmartians/lefthook/v2@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run pre-commit hook
+        run: |
+          git add -A
+          lefthook run pre-commit --no-tty
+
+      - name: Run pre-push hook
+        run: lefthook run pre-push --all-files --no-tty
+
+  changie:
+    name: Changie
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install changie
+        run: |
+          go install github.com/miniscruff/changie@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Require changie fragment for product changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          changed_files=$(git diff --name-only "origin/$BASE_REF...HEAD")
+          printf 'Changed files:\n%s\n' "$changed_files"
+
+          needs_fragment=0
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            case "$file" in
+              cmd/*|internal/*|go.mod|go.sum|install.sh|lefthook.yml)
+                case "$file" in
+                  *_test.go) ;;
+                  *) needs_fragment=1 ;;
+                esac
+                ;;
+            esac
+          done <<EOF
+          $changed_files
+          EOF
+
+          if [ "$needs_fragment" -eq 0 ]; then
+            echo "No product changes detected; changie fragment not required"
+            exit 0
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^\.changes/unreleased/.*\.ya?ml$|^\.changes/[0-9].*\.md$|^CHANGELOG\.md$'; then
+            echo "Changie fragment detected"
+            exit 0
+          fi
+
+          echo "Product changes require a changie fragment in .changes/unreleased/"
+          exit 1
+
+      - name: Validate changie configuration and fragments
+        run: changie batch auto --dry-run >/dev/null

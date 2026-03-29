@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-tag:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points to a commit on main
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "Release tags must point to commits already on main"
+            exit 1
+          fi
+
+      - name: Verify release notes exist
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          notes=".changes/${version}.md"
+          if [ ! -f "$notes" ]; then
+            echo "Expected changie release notes at $notes"
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run release verification checks
+        run: |
+          sh -n install.sh
+          go test -race -count=1 ./...
+          go build -o /tmp/agent-quota ./cmd/agent-quota/
+
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            archive: zip
+          - goos: windows
+            goarch: arm64
+            archive: zip
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build archive
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          ARCHIVE_KIND: ${{ matrix.archive }}
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+
+          version="${TAG#v}"
+          short_commit=$(printf '%s' "$COMMIT" | cut -c1-7)
+          name="agent-quota_${version}_${GOOS}_${GOARCH}"
+          package_dir="dist/$name"
+          binary="agent-quota"
+
+          if [ "$GOOS" = "windows" ]; then
+            binary="${binary}.exe"
+          fi
+
+          mkdir -p "$package_dir"
+
+          GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED=0 \
+            go build \
+            -trimpath \
+            -ldflags="-s -w -X github.com/schnetlerr/agent-quota/internal/version.buildVersion=$TAG -X github.com/schnetlerr/agent-quota/internal/version.buildCommit=$short_commit" \
+            -o "$package_dir/$binary" \
+            ./cmd/agent-quota/
+
+          cp LICENSE "$package_dir/"
+          cp README.md "$package_dir/"
+
+          case "$ARCHIVE_KIND" in
+            tar.gz)
+              tar -C dist -czf "dist/${name}.tar.gz" "$name"
+              ;;
+            zip)
+              (cd dist && zip -rq "${name}.zip" "$name")
+              ;;
+          esac
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: ignore
+
+      - name: Upload zip
+        if: matrix.archive == 'zip'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.goarch }}-zip
+          path: dist/*.zip
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - verify-tag
+      - build
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify changie release notes exist
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          notes=".changes/${version}.md"
+          if [ ! -f "$notes" ]; then
+            echo "Expected changie release notes at $notes"
+            exit 1
+          fi
+          cp "$notes" release-notes.md
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: |
+            dist/*
+            install.sh
