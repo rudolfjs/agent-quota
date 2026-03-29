@@ -171,17 +171,8 @@ func (m *Model) syncViewport() {
 }
 
 func (m *Model) updateViewportSize() {
-	viewportWidth := m.width - scrollbarWidth
-	if viewportWidth < minViewportWidth {
-		viewportWidth = minViewportWidth
-	}
-	m.viewport.SetWidth(viewportWidth)
-
-	viewportHeight := m.height - lipgloss.Height(m.headerView()) - 1
-	if viewportHeight < minViewportHeight {
-		viewportHeight = minViewportHeight
-	}
-	m.viewport.SetHeight(viewportHeight)
+	m.viewport.SetWidth(max(m.width-scrollbarWidth, minViewportWidth))
+	m.viewport.SetHeight(max(m.height-lipgloss.Height(m.headerView())-1, minViewportHeight))
 }
 
 func (m Model) headerView() string {
@@ -203,10 +194,7 @@ func (m Model) headerView() string {
 
 func (m Model) bodyContent() string {
 	var b strings.Builder
-	cardWidth := m.viewport.Width()
-	if cardWidth < minViewportWidth {
-		cardWidth = minViewportWidth
-	}
+	cardWidth := max(m.viewport.Width(), minViewportWidth)
 
 	for _, p := range m.providers {
 		name := p.Name()
@@ -249,10 +237,7 @@ func (m Model) scrollbarView() string {
 		return ""
 	}
 
-	thumbHeight := max(1, int(math.Round(float64(height*height)/float64(m.viewport.TotalLineCount()))))
-	if thumbHeight > height {
-		thumbHeight = height
-	}
+	thumbHeight := min(max(1, int(math.Round(float64(height*height)/float64(m.viewport.TotalLineCount())))), height)
 
 	thumbTop := 0
 	maxOffset := max(1, m.viewport.TotalLineCount()-height)
@@ -315,13 +300,6 @@ const (
 	minViewportHeight = 3
 	scrollbarWidth    = 2
 )
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 func formatRefreshInterval(d time.Duration) string {
 	if d < time.Hour {

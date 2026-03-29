@@ -34,12 +34,18 @@ func RefreshToken(ctx context.Context, credPath string) error {
 
 	// Wait up to 3s for the credentials file mtime to change.
 	deadline := time.Now().Add(3 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for time.Now().Before(deadline) {
-		info, err := os.Stat(credPath)
-		if err == nil && info.ModTime().After(oldMtime) {
+		select {
+		case <-ctx.Done():
 			return nil
+		case <-ticker.C:
+			info, err := os.Stat(credPath)
+			if err == nil && info.ModTime().After(oldMtime) {
+				return nil
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil
