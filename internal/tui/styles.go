@@ -370,6 +370,7 @@ func menuItemTitleStyle(palette appPalette) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(menuSurfaceHex(palette))).
 		Padding(0, 0, 0, 1)
 }
 
@@ -380,6 +381,7 @@ func menuItemDescStyle(palette appPalette) lipgloss.Style {
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(menuSurfaceHex(palette))).
 		Padding(0, 0, 0, 3)
 }
 
@@ -393,6 +395,7 @@ func menuSelectedTitleStyle(palette appPalette) lipgloss.Style {
 		Border(lipgloss.Border{Left: "→"}, false, false, false, true).
 		BorderForeground(lipgloss.Color(palette.LogoBorderHex)).
 		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(menuSurfaceHex(palette))).
 		Padding(0, 0, 0, 0)
 }
 
@@ -405,6 +408,7 @@ func menuSelectedDescStyle(palette appPalette) lipgloss.Style {
 		Border(lipgloss.Border{Left: " "}, false, false, false, true).
 		BorderForeground(lipgloss.Color(palette.LogoBorderHex)).
 		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(menuSurfaceHex(palette))).
 		Padding(0, 0, 0, 2)
 }
 

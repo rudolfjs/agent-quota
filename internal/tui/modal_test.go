@@ -25,6 +25,37 @@ func TestMenuView_appliesBackdropWashAndModalStyling(t *testing.T) {
 	}
 }
 
+func TestOverlayModal_preservesBackdropContentOutsideCenteredModal(t *testing.T) {
+	m := New(nil, WithDarkBackground(true))
+	m.width = 20
+	m.height = 5
+
+	base := strings.Join([]string{
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+	}, "\n")
+
+	got := m.overlayModal(base, "XX")
+	lines := strings.Split(got, "\n")
+	if len(lines) < 3 {
+		t.Fatalf("overlayModal() returned %d lines, want at least 3", len(lines))
+	}
+
+	centerLine := lines[2]
+	if !strings.Contains(centerLine, "abcdefghi") {
+		t.Fatalf("overlayModal() center line = %q, want left backdrop content preserved", centerLine)
+	}
+	if !strings.Contains(centerLine, "lmnopqrst") {
+		t.Fatalf("overlayModal() center line = %q, want right backdrop content preserved", centerLine)
+	}
+	if !strings.Contains(centerLine, "XX") {
+		t.Fatalf("overlayModal() center line = %q, want modal content overlaid", centerLine)
+	}
+}
+
 func TestUpdate_escapeStartsMenuAnimation(t *testing.T) {
 	m := New(nil)
 	m.tick = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {

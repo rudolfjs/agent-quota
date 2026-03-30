@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/schnetlerr/agent-quota/internal/config"
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
@@ -957,27 +958,32 @@ func (m Model) overlayModal(base, modal string) string {
 	}
 
 	basePlaced := menuBackdropStyle(m.palette, m.menuAnimationProgress()).Render(lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, base))
-	modalPlaced := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
-
 	baseLines := strings.Split(basePlaced, "\n")
-	modalLines := strings.Split(modalPlaced, "\n")
-	lineCount := max(len(baseLines), len(modalLines))
-	merged := make([]string, 0, lineCount)
-	for i := 0; i < lineCount; i++ {
-		var baseLine, modalLine string
-		if i < len(baseLines) {
-			baseLine = baseLines[i]
-		}
-		if i < len(modalLines) {
-			modalLine = modalLines[i]
-		}
+	modalLines := strings.Split(modal, "\n")
+
+	modalWidth := lipgloss.Width(modal)
+	modalHeight := lipgloss.Height(modal)
+	offsetX := max((m.width-modalWidth)/2, 0)
+	offsetY := max((m.height-modalHeight)/2, 0)
+
+	for i, modalLine := range modalLines {
 		if strings.TrimSpace(modalLine) == "" {
-			merged = append(merged, baseLine)
 			continue
 		}
-		merged = append(merged, modalLine)
+		lineIndex := offsetY + i
+		if lineIndex < 0 || lineIndex >= len(baseLines) {
+			continue
+		}
+
+		baseLine := baseLines[lineIndex]
+		modalLineWidth := lipgloss.Width(modalLine)
+		prefix := ansi.Cut(baseLine, 0, min(offsetX, m.width))
+		suffixStart := min(offsetX+modalLineWidth, m.width)
+		suffix := ansi.Cut(baseLine, suffixStart, m.width)
+		baseLines[lineIndex] = prefix + modalLine + suffix
 	}
-	return strings.Join(merged, "\n")
+
+	return strings.Join(baseLines, "\n")
 }
 
 func (m Model) menuWidth() int {
