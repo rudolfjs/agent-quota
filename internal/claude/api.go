@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strings"
 
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
 	"github.com/schnetlerr/agent-quota/internal/version"
@@ -108,6 +110,10 @@ func normalizeUsage(usage *UsageResponse) {
 	usage.SevenDayOpus.Utilization = normalizeUtilization(usage.SevenDayOpus.Utilization)
 	usage.SevenDaySonnet.Utilization = normalizeUtilization(usage.SevenDaySonnet.Utilization)
 	usage.ExtraUsage.Utilization = normalizeUtilization(usage.ExtraUsage.Utilization)
+	if shouldNormalizeExtraUsageAmounts(usage.ExtraUsage) {
+		usage.ExtraUsage.MonthlyLimit /= 100
+		usage.ExtraUsage.UsedCredits /= 100
+	}
 }
 
 func normalizeUtilization(value float64) float64 {
@@ -121,4 +127,18 @@ func normalizeUtilization(value float64) float64 {
 		return 1
 	}
 	return value
+}
+
+func shouldNormalizeExtraUsageAmounts(extra ExtraUsageData) bool {
+	if extra.MonthlyLimit <= 0 || extra.UsedCredits < 0 {
+		return false
+	}
+	if extra.Currency != "" && !strings.EqualFold(extra.Currency, "USD") {
+		return false
+	}
+	return isWholeNumber(extra.MonthlyLimit) && isWholeNumber(extra.UsedCredits) && extra.MonthlyLimit >= 1000
+}
+
+func isWholeNumber(value float64) bool {
+	return math.Abs(value-math.Round(value)) < 1e-9
 }

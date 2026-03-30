@@ -75,7 +75,7 @@ func TestFilterByModel_filtersAcrossMultipleProviders(t *testing.T) {
 func TestResolveTUIRefreshInterval_usesConfigWhenFlagNotSet(t *testing.T) {
 	cfg := config.Config{TUI: config.TUIConfig{RefreshMinutes: 12}}
 
-	got, err := resolveTUIRefreshInterval(cfg, 0, false)
+	got, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 0, false)
 	if err != nil {
 		t.Fatalf("resolveTUIRefreshInterval() error = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestResolveTUIRefreshInterval_usesConfigWhenFlagNotSet(t *testing.T) {
 func TestResolveTUIRefreshInterval_usesFlagOverrideWhenSet(t *testing.T) {
 	cfg := config.Config{TUI: config.TUIConfig{RefreshMinutes: 12}}
 
-	got, err := resolveTUIRefreshInterval(cfg, 2, true)
+	got, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 2, true)
 	if err != nil {
 		t.Fatalf("resolveTUIRefreshInterval() error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestResolveTUIRefreshInterval_usesFlagOverrideWhenSet(t *testing.T) {
 func TestResolveTUIRefreshInterval_rejectsNonPositiveFlagOverride(t *testing.T) {
 	cfg := config.Config{TUI: config.TUIConfig{RefreshMinutes: 12}}
 
-	_, err := resolveTUIRefreshInterval(cfg, 0, true)
+	_, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 0, true)
 	if err == nil {
 		t.Fatal("resolveTUIRefreshInterval() error = nil, want error")
 	}

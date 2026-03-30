@@ -74,11 +74,17 @@ func main() {
 			)
 
 			if mode == cli.OutputPretty {
-				refreshInterval, err := resolveTUIRefreshInterval(cfg, refreshMinutes, cmd.Flags().Changed("refresh-minutes"))
+				settings, err := config.LoadSettingsDefault()
 				if err != nil {
 					return err
 				}
-				return runTUI(cmd.Context(), providers, refreshInterval)
+				providers = config.ApplyProviderOrder(providers, settings.ProviderOrder)
+
+				refreshInterval, err := resolveTUIRefreshInterval(cfg, settings, refreshMinutes, cmd.Flags().Changed("refresh-minutes"))
+				if err != nil {
+					return err
+				}
+				return runTUI(cmd.Context(), providers, refreshInterval, settings)
 			}
 
 			results, err := fetchResults(cmd.Context(), providers)
@@ -165,24 +171,39 @@ func fetchResults(ctx context.Context, providers []provider.Provider) ([]provide
 	return results, nil
 }
 
-func resolveTUIRefreshInterval(cfg config.Config, overrideMinutes int, overrideSet bool) (time.Duration, error) {
-	if !overrideSet {
-		return cfg.TUIRefreshInterval(), nil
+func resolveTUIRefreshInterval(cfg config.Config, settings config.Settings, overrideMinutes int, overrideSet bool) (time.Duration, error) {
+	if overrideSet {
+		if overrideMinutes <= 0 {
+			return 0, apierrors.NewConfigError("TUI refresh interval must be greater than 0 minutes", fmt.Errorf("invalid refresh-minutes value: %d", overrideMinutes))
+		}
+		return time.Duration(overrideMinutes) * time.Minute, nil
 	}
-	if overrideMinutes <= 0 {
-		return 0, apierrors.NewConfigError("TUI refresh interval must be greater than 0 minutes", fmt.Errorf("invalid refresh-minutes value: %d", overrideMinutes))
+	if settings.TUI.RefreshMinutes > 0 {
+		return time.Duration(settings.TUI.RefreshMinutes) * time.Minute, nil
 	}
-	return time.Duration(overrideMinutes) * time.Minute, nil
+	return cfg.TUIRefreshInterval(), nil
 }
 
 // runTUI launches the interactive Bubbletea v2 TUI.
-func runTUI(_ context.Context, providers []provider.Provider, refreshInterval time.Duration) error {
+func runTUI(_ context.Context, providers []provider.Provider, refreshInterval time.Duration, settings config.Settings) error {
 	if len(providers) == 0 {
 		return apierrors.NewConfigError("no providers are configured on this machine", fmt.Errorf("no providers selected"))
 	}
-	m := tui.New(providers, tui.WithRefreshInterval(refreshInterval))
+	settingsPath, err := config.DefaultSettingsPath()
+	if err != nil {
+		settingsPath = ""
+	}
+	m := tui.New(providers,
+		tui.WithRefreshInterval(refreshInterval),
+		tui.WithSettings(settings, func(settings config.Settings) error {
+			if settingsPath == "" {
+				return apierrors.NewConfigError("failed to persist agent-quota settings", fmt.Errorf("settings path is unavailable"))
+			}
+			return config.SaveSettings(settingsPath, settings)
+		}),
+	)
 	p := tea.NewProgram(m)
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
 }
 

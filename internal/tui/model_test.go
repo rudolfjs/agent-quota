@@ -261,12 +261,53 @@ func TestUpdate_refreshTickSkipsFetchWhilePending(t *testing.T) {
 	}
 }
 
-func TestView_showsAutoRefreshFooter(t *testing.T) {
-	m := New(nil, WithRefreshInterval(7*time.Minute))
+func TestHeaderView_rendersStyledLogoWhenWide(t *testing.T) {
+	m := New(nil)
+	m.width = 120
+
+	got := m.headerView()
+	if !strings.Contains(got, "AQ") {
+		t.Fatalf("headerView() = %q, want styled AQ logo", got)
+	}
+	if !strings.Contains(got, "agent-quota") {
+		t.Fatalf("headerView() = %q, want agent-quota wordmark", got)
+	}
+	if !strings.Contains(got, "Claude") || !strings.Contains(got, "OpenAI") || !strings.Contains(got, "Gemini") {
+		t.Fatalf("headerView() = %q, want provider chips in header", got)
+	}
+	if strings.Contains(got, "__ _  __ _  ___ _ __ | |_") {
+		t.Fatalf("headerView() = %q, should not render the old ASCII art banner", got)
+	}
+}
+
+func TestView_showsSpinnerNextToAutoRefreshStatus(t *testing.T) {
+	m := New(nil, WithRefreshInterval(7*time.Minute), WithDarkBackground(true))
 
 	v := m.View()
 	if !strings.Contains(v.Content, "Auto-refresh every 7m") {
-		t.Fatalf("View() = %q, want auto-refresh footer", v.Content)
+		t.Fatalf("View() = %q, want auto-refresh status", v.Content)
+	}
+	if !strings.Contains(v.Content, m.spinner.View()) {
+		t.Fatalf("View() = %q, want spinner %q next to refresh status", v.Content, m.spinner.View())
+	}
+}
+
+func TestView_singleProviderSpinnerUsesProviderColor(t *testing.T) {
+	m := New([]provider.Provider{&stubProvider{name: "claude"}}, WithDarkBackground(true))
+
+	v := m.View()
+	if !strings.Contains(v.Content, "\x1b[38;2;222;115;86m") {
+		t.Fatalf("View() = %q, want Claude-colored spinner", v.Content)
+	}
+}
+
+func TestHeaderView_usesLightPaletteWhenConfigured(t *testing.T) {
+	m := New(nil, WithDarkBackground(false))
+	m.width = 120
+
+	got := m.headerView()
+	if !strings.Contains(got, "15;23;42") {
+		t.Fatalf("headerView() = %q, want light-theme title color", got)
 	}
 }
 

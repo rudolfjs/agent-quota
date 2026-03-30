@@ -24,8 +24,8 @@ func TestRenderProviderCard_containsProviderName(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "claude") {
-		t.Errorf("expected card to contain provider name 'claude', got:\n%s", got)
+	if !strings.Contains(got, "Claude") {
+		t.Errorf("expected card to contain provider name 'Claude', got:\n%s", got)
 	}
 }
 
@@ -113,8 +113,8 @@ func TestRenderProviderCard_errorStatus(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "Status: error") {
-		t.Errorf("expected card to contain 'Status: error', got:\n%s", got)
+	if !strings.Contains(got, "ERROR") {
+		t.Errorf("expected card to contain 'ERROR', got:\n%s", got)
 	}
 }
 
@@ -133,11 +133,11 @@ func TestRenderProviderCard_containsPlanAndStatus(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "Plan: plus") {
-		t.Errorf("expected card to contain 'Plan: plus', got:\n%s", got)
+	if !strings.Contains(got, "PLUS") {
+		t.Errorf("expected card to contain 'PLUS', got:\n%s", got)
 	}
-	if !strings.Contains(got, "Status: ok") {
-		t.Errorf("expected card to contain 'Status: ok', got:\n%s", got)
+	if !strings.Contains(got, "OK") {
+		t.Errorf("expected card to contain 'OK', got:\n%s", got)
 	}
 }
 
@@ -150,8 +150,135 @@ func TestRenderProviderCard_unavailableStatus(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "Status: unavailable") {
-		t.Errorf("expected card to contain 'Status: unavailable', got:\n%s", got)
+	if !strings.Contains(got, "UNAVAILABLE") {
+		t.Errorf("expected card to contain 'UNAVAILABLE', got:\n%s", got)
+	}
+}
+
+func TestRenderProviderCard_rendersFriendlyProviderHeader(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "openai",
+		Plan:     "plus",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "◎ OpenAI") {
+		t.Fatalf("expected card to contain provider icon and friendly name '◎ OpenAI', got:\n%s", got)
+	}
+	if !strings.Contains(got, "PLUS") {
+		t.Fatalf("expected card to contain plan badge 'PLUS', got:\n%s", got)
+	}
+	if !strings.Contains(got, "OK") {
+		t.Fatalf("expected card to contain status badge 'OK', got:\n%s", got)
+	}
+}
+
+func TestRenderProviderCard_lowRemainingUsesDangerColor(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.85,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "\x1b[38;2;239;68;68m") {
+		t.Fatalf("expected low remaining window to use red styling, got:\n%q", got)
+	}
+}
+
+func TestRenderProviderCard_claudeUsesBrandColor(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "\x1b[38;2;222;115;86m") {
+		t.Fatalf("expected Claude card to use brand color #DE7356, got:\n%q", got)
+	}
+}
+
+func TestRenderProviderCard_openAIUsesWhiteHeadingAndGrayBars(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "openai",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "\x1b[38;2;255;255;255m") {
+		t.Fatalf("expected OpenAI card to use white heading/border styling, got:\n%q", got)
+	}
+	if !strings.Contains(got, "\x1b[38;2;156;163;175m") {
+		t.Fatalf("expected OpenAI card to use gray bar styling, got:\n%q", got)
+	}
+}
+
+func TestRenderProviderCard_geminiKeepsPurpleTheme(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "gemini",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "\x1b[38;2;139;92;246m") {
+		t.Fatalf("expected Gemini card to keep purple theme, got:\n%q", got)
+	}
+}
+
+func TestRenderProviderCard_openAILightThemeUsesDarkHeadingAndSoftTrack(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "openai",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := renderProviderCardWithPalette(r, 60, newPalette(false))
+
+	if !strings.Contains(got, "15;23;42") {
+		t.Fatalf("expected OpenAI light theme to use dark heading color, got:\n%q", got)
+	}
+	if !strings.Contains(got, "226;232;240") {
+		t.Fatalf("expected OpenAI light theme to use a soft gray track, got:\n%q", got)
 	}
 }
 

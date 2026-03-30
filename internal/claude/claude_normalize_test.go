@@ -63,3 +63,55 @@ func TestFetchUsage_normalizesWholeNumberUtilization(t *testing.T) {
 		t.Fatalf("ExtraUsage.Utilization = %f, want 0.485", resp.ExtraUsage.Utilization)
 	}
 }
+
+func TestFetchUsage_normalizesCentBasedExtraUsageAmounts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"five_hour": map[string]any{
+				"utilization": 12,
+				"resets_at":   "2025-03-29T20:00:00Z",
+			},
+			"seven_day": map[string]any{
+				"utilization": 41,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_oauth_apps": map[string]any{
+				"utilization": 0,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_opus": map[string]any{
+				"utilization": 0,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_sonnet": map[string]any{
+				"utilization": 14,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"extra_usage": map[string]any{
+				"is_enabled":    true,
+				"monthly_limit": 1000.0,
+				"used_credits":  400.0,
+				"utilization":   40.0,
+				"currency":      "USD",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := claude.NewAPIClient(srv.URL, http.DefaultClient)
+	resp, err := client.FetchUsage(t.Context(), "tok_test")
+	if err != nil {
+		t.Fatalf("FetchUsage: %v", err)
+	}
+
+	if resp.ExtraUsage.MonthlyLimit != 10.0 {
+		t.Fatalf("ExtraUsage.MonthlyLimit = %f, want 10.0", resp.ExtraUsage.MonthlyLimit)
+	}
+	if resp.ExtraUsage.UsedCredits != 4.0 {
+		t.Fatalf("ExtraUsage.UsedCredits = %f, want 4.0", resp.ExtraUsage.UsedCredits)
+	}
+	if resp.ExtraUsage.Utilization != 0.4 {
+		t.Fatalf("ExtraUsage.Utilization = %f, want 0.4", resp.ExtraUsage.Utilization)
+	}
+}
