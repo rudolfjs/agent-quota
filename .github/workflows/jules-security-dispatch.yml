@@ -7,10 +7,11 @@ on:
 jobs:
   security-review:
     runs-on: ubuntu-latest
-    # Trigger on @jules-security comments from org members/owners/collaborators only
+    # Trigger on @jules-security comments from org members/owners/collaborators on PRs only
     if: >
       contains(github.event.comment.body, '@jules-security') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      github.event.issue.pull_request != null
     permissions:
       contents: read
       issues: write
@@ -22,6 +23,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           gh issue view "$ISSUE_NUMBER" \
             --repo "$REPO" \
@@ -32,7 +34,7 @@ jobs:
           ISSUE_BODY=$(jq -r '.body // "No description provided."' /tmp/issue.json)
           ISSUE_LABELS=$(jq -r '.labels | join(", ")' /tmp/issue.json)
 
-          # Use random delimiters to prevent injection via crafted issue content
+          # Use random delimiters to prevent injection via crafted issue/comment content
           DELIM=$(openssl rand -hex 8)
 
           {
@@ -47,7 +49,17 @@ jobs:
             echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
-          echo "labels=$ISSUE_LABELS" >> "$GITHUB_OUTPUT"
+          {
+            echo "labels<<$DELIM"
+            echo "$ISSUE_LABELS"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "comment_body<<$DELIM"
+            echo "$COMMENT_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Detect PR branch
         id: branch
@@ -56,7 +68,7 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          # PR comments arrive as issue_comment events — check if it's a PR
+          # issue_comment on a PR — fetch the PR's head branch
           BRANCH=$(gh pr view "$ISSUE_NUMBER" --repo "$REPO" \
             --json headRefName --jq '.headRefName' 2>/dev/null || echo "main")
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
@@ -152,7 +164,7 @@ jobs:
 
             ${{ steps.issue.outputs.body }}
 
-            **Reviewer comment**: ${{ github.event.comment.body }}
+            **Reviewer comment**: ${{ steps.issue.outputs.comment_body }}
 
             ## Output expectations
 
