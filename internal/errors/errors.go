@@ -3,13 +3,17 @@
 // ensuring sensitive details never cross trust boundaries.
 package errors
 
+import "time"
+
 // DomainError wraps an internal error with a safe user-facing message.
 // The Error() method returns only Message — if this error is accidentally
 // serialized to output, only the safe message is exposed.
 type DomainError struct {
-	Kind    string // "auth", "network", "api", "config"
-	Message string // safe for user display
-	Cause   error  // original error — log internally, never show to user
+	Kind       string        // "auth", "network", "api", "config"
+	Message    string        // safe for user display
+	Cause      error         // original error — log internally, never show to user
+	StatusCode int           // HTTP status code, if applicable (0 means not set)
+	RetryAfter time.Duration // server-provided backoff hint, if applicable
 }
 
 // Error returns only the safe user-facing message.

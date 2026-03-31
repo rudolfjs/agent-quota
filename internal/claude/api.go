@@ -7,7 +7,9 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
 	"github.com/schnetlerr/agent-quota/internal/version"
@@ -89,10 +91,15 @@ func (c *APIClient) FetchUsage(ctx context.Context, accessToken string) (*UsageR
 		return nil, apierrors.NewAuthError("Claude token is invalid or expired", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, apierrors.NewAPIError(
-			fmt.Sprintf("usage API returned unexpected status %d", resp.StatusCode),
+		apiErr := apierrors.NewAPIError(
+			"usage API returned an unexpected status",
 			fmt.Errorf("HTTP %d", resp.StatusCode),
 		)
+		apiErr.StatusCode = resp.StatusCode
+		if retryAfter, ok := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()); ok {
+			apiErr.RetryAfter = retryAfter
+		}
+		return nil, apiErr
 	}
 
 	var usage UsageResponse
@@ -141,4 +148,26 @@ func shouldNormalizeExtraUsageAmounts(extra ExtraUsageData) bool {
 
 func isWholeNumber(value float64) bool {
 	return math.Abs(value-math.Round(value)) < 1e-9
+}
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0, false
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	delay := when.Sub(now)
+	if delay <= 0 {
+		return 0, false
+	}
+	return delay, true
 }

@@ -98,14 +98,14 @@ func TestGemini_FetchQuota_success(t *testing.T) {
 	if len(result.Windows) != 2 {
 		t.Fatalf("len(Windows) = %d, want 2", len(result.Windows))
 	}
-	if result.Windows[0].Name != "gemini-2.5-flash" {
-		t.Fatalf("Windows[0].Name = %q, want %q", result.Windows[0].Name, "gemini-2.5-flash")
+	if result.Windows[0].Name != "gemini-2.5-pro" {
+		t.Fatalf("Windows[0].Name = %q, want %q", result.Windows[0].Name, "gemini-2.5-pro")
 	}
-	if result.Windows[0].Utilization != 0.25 {
-		t.Fatalf("Windows[0].Utilization = %f, want 0.25", result.Windows[0].Utilization)
+	if result.Windows[0].Utilization != 0.50 {
+		t.Fatalf("Windows[0].Utilization = %f, want 0.50", result.Windows[0].Utilization)
 	}
-	if result.Windows[1].Utilization != 0.50 {
-		t.Fatalf("Windows[1].Utilization = %f, want 0.50", result.Windows[1].Utilization)
+	if result.Windows[1].Utilization != 0.25 {
+		t.Fatalf("Windows[1].Utilization = %f, want 0.25", result.Windows[1].Utilization)
 	}
 }
 

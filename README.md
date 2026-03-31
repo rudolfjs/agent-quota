@@ -15,19 +15,25 @@ The standard release path is:
 Install the latest release to `~/.local/bin`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | sh
 ```
 
 Install to `/usr/local/bin` instead:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/install.sh | BIN_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
 ```
 
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/install.sh | VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | VERSION=v0.1.0 sh
+```
+
+Skip the confirmation prompt (for CI / scripts):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | YES=1 sh
 ```
 
 ### Install with Go
@@ -45,31 +51,49 @@ go build -o agent-quota ./cmd/agent-quota/
 ## Usage
 
 ```bash
-./agent-quota                 # pretty TUI dashboard
-./agent-quota --refresh-minutes 2
-./agent-quota --json          # one-shot JSON
-./agent-quota -p claude       # one-shot JSON for a single provider
-./agent-quota status          # one-shot JSON for scripts
+agent-quota                   # pretty TUI dashboard
+agent-quota --refresh-minutes 5
+agent-quota --json            # one-shot JSON
+agent-quota -p claude         # one-shot JSON for a single provider
+agent-quota -p copilot        # GitHub Copilot CLI quota
+agent-quota status            # one-shot JSON for scripts
 ```
 
 ## Config
 
-Default config path:
+Default config paths:
 
 ```text
-~/.config/agent-quota/config.json
+~/.config/agent-quota/providers.json
+~/.config/agent-quota/settings.json
 ```
 
-Example:
+Provider selection example:
 
 ```json
 {
-  "providers": ["claude", "gemini", "openai"],
+  "providers": ["claude", "gemini", "openai", "copilot"]
+}
+```
+
+TUI settings example:
+
+```json
+{
+  "provider_order": ["claude", "openai", "gemini", "copilot"],
   "tui": {
-    "refresh_minutes": 5
+    "hide_header": false,
+    "refresh_minutes": 15
   }
 }
 ```
+
+## Provider setup
+
+- Claude: `claude` CLI login
+- OpenAI: `codex login`
+- Gemini: `gemini` CLI login
+- Copilot: `copilot login`
 
 ## Development
 

@@ -129,8 +129,6 @@ func convertUsage(creds OAuthCredentials, usage *UsageResponse) provider.QuotaRe
 	result.Windows = []provider.Window{
 		parseWindow("five_hour", usage.FiveHour),
 		parseWindow("seven_day", usage.SevenDay),
-		parseWindow("seven_day_oauth_apps", usage.SevenDayOAuth),
-		parseWindow("seven_day_opus", usage.SevenDayOpus),
 		parseWindow("seven_day_sonnet", usage.SevenDaySonnet),
 	}
 

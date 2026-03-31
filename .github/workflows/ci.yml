@@ -33,7 +33,7 @@ jobs:
           fi
 
       - name: Check installer script syntax
-        run: sh -n install.sh
+        run: sh -n scripts/install.sh
 
       - name: Run go vet
         run: go vet ./...
@@ -51,7 +51,7 @@ jobs:
         run: go build -o /tmp/agent-quota ./cmd/agent-quota/
 
       - name: Verify installer script is executable
-        run: test -x install.sh
+        run: test -x scripts/install.sh
 
   lefthook:
     name: Lefthook
@@ -115,7 +115,7 @@ jobs:
           while IFS= read -r file; do
             [ -n "$file" ] || continue
             case "$file" in
-              cmd/*|internal/*|go.mod|go.sum|install.sh|lefthook.yml)
+              cmd/*|internal/*|go.mod|go.sum|scripts/install.sh|lefthook.yml)
                 case "$file" in
                   *_test.go) ;;
                   *) needs_fragment=1 ;;
@@ -140,4 +140,16 @@ jobs:
           exit 1
 
       - name: Validate changie configuration and fragments
-        run: changie batch auto --dry-run >/dev/null
+        run: |
+          if find .changes/unreleased -maxdepth 1 -type f ! -name '.gitkeep' | grep -q .; then
+            changie batch auto --dry-run >/dev/null
+            exit 0
+          fi
+
+          if find .changes -maxdepth 1 -type f -name '[0-9]*.md' | grep -q .; then
+            echo "Release notes detected"
+            exit 0
+          fi
+
+          echo "No changie fragments or release notes found" >&2
+          exit 1

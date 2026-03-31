@@ -16,6 +16,7 @@ import (
 	"github.com/schnetlerr/agent-quota/internal/claude"
 	"github.com/schnetlerr/agent-quota/internal/cli"
 	"github.com/schnetlerr/agent-quota/internal/config"
+	"github.com/schnetlerr/agent-quota/internal/copilot"
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
 	"github.com/schnetlerr/agent-quota/internal/gemini"
 	"github.com/schnetlerr/agent-quota/internal/openai"
@@ -29,10 +30,7 @@ func main() {
 	ctx := context.Background()
 
 	// Build registry and register providers.
-	registry := provider.NewRegistry()
-	registry.Register(claude.New())
-	registry.Register(openai.New())
-	registry.Register(gemini.New())
+	registry := newRegistry()
 
 	// Root command flags.
 	var (
@@ -40,6 +38,7 @@ func main() {
 		modelFlag      string
 		jsonFlag       bool
 		prettyFlag     bool
+		quickFlag      bool
 		debug          bool
 		refreshMinutes int
 	)
@@ -49,10 +48,12 @@ func main() {
 		Short: "Fetch AI provider usage and quota data",
 		Long:  "CLI tool that fetches AI provider usage/quota data.\nPretty TUI for humans, headless JSON for scripts/agents.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if quickFlag {
+				prettyFlag = true
+			}
 			if debug {
 				slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 			}
-
 			cfg, err := config.LoadDefault()
 			if err != nil {
 				return err
@@ -78,13 +79,26 @@ func main() {
 				if err != nil {
 					return err
 				}
+				cachedResults := map[string]provider.QuotaResult{}
+				if cachePath, cachePathErr := config.DefaultQuotaCachePath(); cachePathErr == nil {
+					cachedResults, err = config.LoadQuotaCache(cachePath)
+					if err != nil {
+						return err
+					}
+				}
+				if len(cfg.Providers) > 0 {
+					settings.Providers = cfg.Providers
+				}
+				if providerFlag == "" {
+					providers = registry.Available()
+				}
 				providers = config.ApplyProviderOrder(providers, settings.ProviderOrder)
 
 				refreshInterval, err := resolveTUIRefreshInterval(cfg, settings, refreshMinutes, cmd.Flags().Changed("refresh-minutes"))
 				if err != nil {
 					return err
 				}
-				return runTUI(cmd.Context(), providers, refreshInterval, settings)
+				return runTUI(cmd.Context(), providers, refreshInterval, settings, cachedResults, quickFlag)
 			}
 
 			results, err := fetchResults(cmd.Context(), providers)
@@ -104,10 +118,11 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, gemini)")
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, gemini, copilot)")
 	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. gemini-3-flash-preview)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "force JSON output")
 	rootCmd.Flags().BoolVar(&prettyFlag, "pretty", false, "force TUI output")
+	rootCmd.Flags().BoolVarP(&quickFlag, "quick", "q", false, "start in compact quick-view mode")
 	rootCmd.Flags().IntVar(&refreshMinutes, "refresh-minutes", 0, "override TUI auto-refresh interval in minutes")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "enable debug logging to stderr")
 
@@ -173,19 +188,22 @@ func fetchResults(ctx context.Context, providers []provider.Provider) ([]provide
 
 func resolveTUIRefreshInterval(cfg config.Config, settings config.Settings, overrideMinutes int, overrideSet bool) (time.Duration, error) {
 	if overrideSet {
-		if overrideMinutes <= 0 {
-			return 0, apierrors.NewConfigError("TUI refresh interval must be greater than 0 minutes", fmt.Errorf("invalid refresh-minutes value: %d", overrideMinutes))
+		if overrideMinutes < config.MinimumTUIRefreshMinutes {
+			return 0, apierrors.NewConfigError(
+				fmt.Sprintf("TUI refresh interval must be at least %d minutes", config.MinimumTUIRefreshMinutes),
+				fmt.Errorf("invalid refresh-minutes value: %d", overrideMinutes),
+			)
 		}
-		return time.Duration(overrideMinutes) * time.Minute, nil
+		return time.Duration(config.NormalizeTUIRefreshMinutes(overrideMinutes)) * time.Minute, nil
 	}
 	if settings.TUI.RefreshMinutes > 0 {
-		return time.Duration(settings.TUI.RefreshMinutes) * time.Minute, nil
+		return time.Duration(config.NormalizeTUIRefreshMinutes(settings.TUI.RefreshMinutes)) * time.Minute, nil
 	}
 	return cfg.TUIRefreshInterval(), nil
 }
 
 // runTUI launches the interactive Bubbletea v2 TUI.
-func runTUI(_ context.Context, providers []provider.Provider, refreshInterval time.Duration, settings config.Settings) error {
+func runTUI(_ context.Context, providers []provider.Provider, refreshInterval time.Duration, settings config.Settings, cachedResults map[string]provider.QuotaResult, quickView bool) error {
 	if len(providers) == 0 {
 		return apierrors.NewConfigError("no providers are configured on this machine", fmt.Errorf("no providers selected"))
 	}
@@ -193,18 +211,51 @@ func runTUI(_ context.Context, providers []provider.Provider, refreshInterval ti
 	if err != nil {
 		settingsPath = ""
 	}
-	m := tui.New(providers,
+	providersPath, err := config.DefaultPath()
+	if err != nil {
+		providersPath = ""
+	}
+	quotaCachePath, err := config.DefaultQuotaCachePath()
+	if err != nil {
+		quotaCachePath = ""
+	}
+	opts := []tui.Option{
 		tui.WithRefreshInterval(refreshInterval),
+		tui.WithCachedResults(cachedResults),
+		tui.WithQuickViewEnabled(quickView),
+		tui.WithQuotaCacheSave(func(results map[string]provider.QuotaResult) error {
+			if quotaCachePath == "" {
+				return apierrors.NewConfigError("failed to persist quota cache", fmt.Errorf("quota cache path is unavailable"))
+			}
+			return config.SaveQuotaCache(quotaCachePath, results)
+		}),
 		tui.WithSettings(settings, func(settings config.Settings) error {
-			if settingsPath == "" {
+			if settingsPath == "" || providersPath == "" {
 				return apierrors.NewConfigError("failed to persist agent-quota settings", fmt.Errorf("settings path is unavailable"))
 			}
-			return config.SaveSettings(settingsPath, settings)
+			providersCfg := config.Config{Providers: settings.Providers}
+			if err := config.Save(providersPath, providersCfg); err != nil {
+				return err
+			}
+			settingsCopy := settings
+			settingsCopy.Providers = nil
+			return config.SaveSettings(settingsPath, settingsCopy)
 		}),
-	)
+	}
+
+	m := tui.New(providers, opts...)
 	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
+}
+
+func newRegistry() *provider.Registry {
+	registry := provider.NewRegistry()
+	registry.Register(claude.New())
+	registry.Register(copilot.New())
+	registry.Register(gemini.New())
+	registry.Register(openai.New())
+	return registry
 }
 
 // isTerminal reports whether f is connected to a terminal.

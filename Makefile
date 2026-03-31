@@ -21,10 +21,17 @@ fmt:
 	fi
 
 changie-check:
-	changie batch auto --dry-run >/dev/null
+	@if find .changes/unreleased -maxdepth 1 -type f ! -name '.gitkeep' | grep -q .; then \
+		changie batch auto --dry-run >/dev/null; \
+	elif find .changes -maxdepth 1 -type f -name '[0-9]*.md' | grep -q .; then \
+		echo "release notes detected"; \
+	else \
+		echo "no changie fragments or release notes found" >&2; \
+		exit 1; \
+	fi
 
 release-check: fmt lint test changie-check
-	sh -n install.sh
+	sh -n scripts/install.sh
 	go build -o /tmp/$(BINARY) $(CMD)
 
 hooks-install:

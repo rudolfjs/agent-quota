@@ -9,10 +9,14 @@ import (
 	"time"
 
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	"github.com/schnetlerr/agent-quota/internal/fileutil"
 	"github.com/schnetlerr/agent-quota/internal/provider"
 )
 
-const DefaultTUIRefreshMinutes = 5
+const (
+	MinimumTUIRefreshMinutes = 5
+	DefaultTUIRefreshMinutes = 15
+)
 
 // TUIConfig holds dashboard-specific settings.
 type TUIConfig struct {
@@ -25,18 +29,18 @@ type Config struct {
 	TUI       TUIConfig `json:"tui"`
 }
 
-// DefaultPath returns the default config file path.
+// DefaultPath returns the default provider-selection config file path.
 // Prefers XDG config dir; falls back to ~/.config. Returns an error only if
 // neither os.UserConfigDir nor os.UserHomeDir can be determined.
 func DefaultPath() (string, error) {
 	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "agent-quota", "config.json"), nil
+		return filepath.Join(dir, "agent-quota", "providers.json"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "agent-quota", "config.json"), nil
+	return filepath.Join(home, ".config", "agent-quota", "providers.json"), nil
 }
 
 // Load reads the config file. A missing file is treated as an empty config.
@@ -106,7 +110,7 @@ func normalizeProviders(names []string) []string {
 	result := make([]string, 0, len(names))
 	for _, name := range names {
 		name = normalizeProviderName(name)
-		if name == "" {
+		if name == "" || isRemovedProviderName(name) {
 			continue
 		}
 		if _, ok := seen[name]; ok {
@@ -122,15 +126,51 @@ func normalizeProviderName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
+func isRemovedProviderName(name string) bool {
+	switch normalizeProviderName(name) {
+	case "jules":
+		return true
+	default:
+		return false
+	}
+}
+
+// Save persists provider-selection config to disk using an atomic write.
+func Save(path string, cfg Config) error {
+	cfg.Providers = normalizeProviders(cfg.Providers)
+	cfg.TUI.RefreshMinutes = normalizeRefreshMinutes(cfg.TUI.RefreshMinutes)
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return apierrors.NewConfigError("failed to encode agent-quota config", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return apierrors.NewConfigError("failed to create agent-quota config directory", err)
+	}
+	if err := fileutil.AtomicWriteFile(path, data, 0o600); err != nil {
+		return apierrors.NewConfigError("failed to persist agent-quota config", err)
+	}
+	return nil
+}
+
 func defaultConfig() Config {
 	return Config{
 		TUI: TUIConfig{RefreshMinutes: DefaultTUIRefreshMinutes},
 	}
 }
 
+func NormalizeTUIRefreshMinutes(minutes int) int {
+	return normalizeRefreshMinutes(minutes)
+}
+
 func normalizeRefreshMinutes(minutes int) int {
 	if minutes <= 0 {
 		return DefaultTUIRefreshMinutes
+	}
+	if minutes < MinimumTUIRefreshMinutes {
+		return MinimumTUIRefreshMinutes
 	}
 	return minutes
 }

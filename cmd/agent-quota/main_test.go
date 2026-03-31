@@ -87,19 +87,19 @@ func TestResolveTUIRefreshInterval_usesConfigWhenFlagNotSet(t *testing.T) {
 func TestResolveTUIRefreshInterval_usesFlagOverrideWhenSet(t *testing.T) {
 	cfg := config.Config{TUI: config.TUIConfig{RefreshMinutes: 12}}
 
-	got, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 2, true)
+	got, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 5, true)
 	if err != nil {
 		t.Fatalf("resolveTUIRefreshInterval() error = %v", err)
 	}
-	if got != 2*time.Minute {
-		t.Fatalf("resolveTUIRefreshInterval() = %v, want %v", got, 2*time.Minute)
+	if got != 5*time.Minute {
+		t.Fatalf("resolveTUIRefreshInterval() = %v, want %v", got, 5*time.Minute)
 	}
 }
 
-func TestResolveTUIRefreshInterval_rejectsNonPositiveFlagOverride(t *testing.T) {
+func TestResolveTUIRefreshInterval_rejectsTooSmallFlagOverride(t *testing.T) {
 	cfg := config.Config{TUI: config.TUIConfig{RefreshMinutes: 12}}
 
-	_, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 0, true)
+	_, err := resolveTUIRefreshInterval(cfg, config.Settings{}, 2, true)
 	if err == nil {
 		t.Fatal("resolveTUIRefreshInterval() error = nil, want error")
 	}
@@ -110,5 +110,19 @@ func TestResolveTUIRefreshInterval_rejectsNonPositiveFlagOverride(t *testing.T) 
 	}
 	if domErr.Kind != "config" {
 		t.Fatalf("Kind = %q, want %q", domErr.Kind, "config")
+	}
+}
+
+func TestNewRegistry_doesNotRegisterJules(t *testing.T) {
+	reg := newRegistry()
+
+	if _, ok := reg.Get("jules"); ok {
+		t.Fatal("registry unexpectedly contains jules provider")
+	}
+
+	for _, name := range []string{"claude", "openai", "gemini", "copilot"} {
+		if _, ok := reg.Get(name); !ok {
+			t.Fatalf("registry missing provider %q", name)
+		}
 	}
 }

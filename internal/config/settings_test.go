@@ -33,7 +33,9 @@ func TestSaveSettings_roundTripsJSONSettingsFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings")
 	want := config.Settings{
+		Providers:     []string{"claude", "openai"},
 		ProviderOrder: []string{"claude", "openai", "gemini"},
+		QuickView:     []string{"claude:five_hour", "gemini:gemini-3-pro-preview"},
 		TUI: config.TUISettings{
 			HideHeader:     true,
 			RefreshMinutes: 10,
@@ -61,6 +63,20 @@ func TestSaveSettings_roundTripsJSONSettingsFile(t *testing.T) {
 	}
 }
 
+func TestApplyProviderSelection_filtersProvidersAndPreservesOrder(t *testing.T) {
+	providers := []provider.Provider{
+		&fakeProvider{name: "claude", available: true},
+		&fakeProvider{name: "gemini", available: true},
+		&fakeProvider{name: "openai", available: true},
+	}
+
+	got := config.ApplyProviderSelection(providers, []string{"openai", "claude"})
+	want := []string{"claude", "openai"}
+	if names := providerNames(got); !reflect.DeepEqual(names, want) {
+		t.Fatalf("provider names = %v, want %v", names, want)
+	}
+}
+
 func TestApplyProviderOrder_reordersProvidersAndPreservesUnknownTail(t *testing.T) {
 	providers := []provider.Provider{
 		&fakeProvider{name: "claude", available: true},
@@ -81,5 +97,63 @@ func TestSettingsRefreshMinutesValueCanBeAppliedAsDuration(t *testing.T) {
 	got := time.Duration(settings.TUI.RefreshMinutes) * time.Minute
 	if got != 15*time.Minute {
 		t.Fatalf("refresh duration = %v, want %v", got, 15*time.Minute)
+	}
+}
+
+func TestLoadSettings_clampsRefreshMinutesToMinimum(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"tui":{"refresh_minutes":5}}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	got, err := config.LoadSettings(path)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if got.TUI.RefreshMinutes != config.MinimumTUIRefreshMinutes {
+		t.Fatalf("TUI.RefreshMinutes = %d, want %d", got.TUI.RefreshMinutes, config.MinimumTUIRefreshMinutes)
+	}
+}
+
+func TestLoadSettings_normalizesQuickViewMetricIDs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"quick_view":[" Claude : five_hour ","gemini:gemini-3-pro-preview","","GEMINI:gemini-3-pro-preview"]}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	got, err := config.LoadSettings(path)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	want := []string{"claude:five_hour", "gemini:gemini-3-pro-preview"}
+	if !reflect.DeepEqual(got.QuickView, want) {
+		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
+	}
+}
+
+func TestLoadSettings_dropsRemovedJulesEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	payload := `{"providers":["claude","jules"],"provider_order":["claude","jules","openai"],"quick_view":["claude:five_hour","jules:daily","openai:five_hour"]}`
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	got, err := config.LoadSettings(path)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if want := []string{"claude"}; !reflect.DeepEqual(got.Providers, want) {
+		t.Fatalf("Providers = %v, want %v", got.Providers, want)
+	}
+	if want := []string{"claude", "openai"}; !reflect.DeepEqual(got.ProviderOrder, want) {
+		t.Fatalf("ProviderOrder = %v, want %v", got.ProviderOrder, want)
+	}
+	if want := []string{"claude:five_hour", "openai:five_hour"}; !reflect.DeepEqual(got.QuickView, want) {
+		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
 	}
 }

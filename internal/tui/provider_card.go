@@ -30,8 +30,19 @@ func renderProviderCardWithPalette(r provider.QuotaResult, width int, palette ap
 		return cardStyle(theme).Width(width).Render(strings.Join(sections, "\n\n"))
 	}
 
+	var currentGroup string
 	for _, w := range r.Windows {
-		sections = append(sections, renderWindow(w, width, theme, palette))
+		if !isQuickViewMetricSupported(r.Provider, w.Name) {
+			continue
+		}
+		info := metricDisplayInfo(r.Provider, w.Name)
+		if info.Group != currentGroup {
+			currentGroup = info.Group
+			if info.Group != "" {
+				sections = append(sections, subtitleStyle(palette).Render(info.Group))
+			}
+		}
+		sections = append(sections, renderWindow(info.Name, info.Group != "", w, width, theme, palette))
 	}
 
 	if r.ExtraUsage != nil && r.ExtraUsage.Enabled {
@@ -42,48 +53,68 @@ func renderProviderCardWithPalette(r provider.QuotaResult, width int, palette ap
 }
 
 func renderProviderHeader(r provider.QuotaResult, theme providerTheme, palette appPalette) string {
-	parts := []string{providerTitleStyle(theme).Render(providerLabel(r.Provider))}
-	if r.Plan != "" {
-		parts = append(parts, providerBadgeStyle(theme).Render(strings.ToUpper(r.Plan)))
+	providerPart := providerTitleStyle(theme).Render(providerLabel(r.Provider))
+	plan := strings.ToUpper(r.Plan)
+	status := strings.ToUpper(r.Status)
+
+	badgeGroup := ""
+	switch {
+	case plan != "" && status != "":
+		badgeGroup = lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			providerBadgeStyle(theme).Padding(0, 0, 0, 1).Render(plan),
+			renderJoinedStatusBadge(status, palette),
+		)
+	case plan != "":
+		badgeGroup = providerBadgeStyle(theme).Render(plan)
+	case status != "":
+		badgeGroup = renderStatusBadge(r.Status, palette)
 	}
-	if badge := renderStatusBadge(r.Status, palette); badge != "" {
-		parts = append(parts, badge)
+
+	if badgeGroup == "" {
+		return providerPart
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, parts...)
+	return lipgloss.JoinHorizontal(lipgloss.Center, providerPart, " ", badgeGroup)
 }
 
 func renderStatusBadge(status string, palette appPalette) string {
+	return renderStatusBadgeWithLeftPadding(status, palette, true)
+}
+
+func renderJoinedStatusBadge(status string, palette appPalette) string {
+	return renderStatusBadgeWithLeftPadding(status, palette, false)
+}
+
+func renderStatusBadgeWithLeftPadding(status string, palette appPalette, leftPadding bool) string {
 	if status == "" {
 		return ""
 	}
 
+	style := statusWarnStyle(palette)
+	label := strings.ToUpper(status)
+	if !leftPadding {
+		style = style.Padding(0, 1, 0, 0)
+	}
+
 	switch status {
 	case "ok":
-		return statusOKStyle(palette).Render("OK")
+		style = statusOKStyle(palette)
+		label = "OK"
 	case "unavailable":
-		return statusWarnStyle(palette).Render("UNAVAILABLE")
+		style = statusWarnStyle(palette)
+		label = "UNAVAILABLE"
 	case "error":
-		return statusErrorStyle(palette).Render("ERROR")
-	default:
-		return statusWarnStyle(palette).Render(strings.ToUpper(status))
+		style = statusErrorStyle(palette)
+		label = "ERROR"
 	}
+	if !leftPadding {
+		style = style.Padding(0, 1, 0, 0)
+	}
+	return style.Render(label)
 }
 
 func providerLabel(name string) string {
-	return providerIcon(name) + " " + providerDisplayName(name)
-}
-
-func providerIcon(name string) string {
-	switch strings.ToLower(name) {
-	case "claude":
-		return "✦"
-	case "openai":
-		return "◎"
-	case "gemini":
-		return "◆"
-	default:
-		return "•"
-	}
+	return providerDisplayName(name)
 }
 
 func providerDisplayName(name string) string {
@@ -94,6 +125,8 @@ func providerDisplayName(name string) string {
 		return "OpenAI"
 	case "gemini":
 		return "Gemini"
+	case "copilot":
+		return "Copilot"
 	default:
 		return name
 	}
@@ -110,24 +143,24 @@ func providerStatusDetail(status string) string {
 	}
 }
 
-func renderWindow(w provider.Window, width int, theme providerTheme, palette appPalette) string {
+// renderWindow renders a single quota window. name is the human-friendly display
+// name; inGroup=true adds a 2-space indent so the entry sits under a group header.
+func renderWindow(name string, inGroup bool, w provider.Window, width int, theme providerTheme, palette appPalette) string {
 	usedPct := percent(w.Utilization)
-	remaining := clampPercent(1 - w.Utilization)
-	remainingPct := percent(remaining)
 	resetStr := formatRelativeTime(w.ResetsAt)
 
-	heading := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		windowStyle(palette).Render(w.Name),
-		subtleStyle(palette).Render(" • "),
-		quotaLabelStyle(theme, remaining).Render(fmt.Sprintf("%d%% left", remainingPct)),
-	)
+	barWidth := width
+	indent := ""
+	if inGroup {
+		barWidth = max(width-2, 12)
+		indent = "  "
+	}
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		heading,
-		renderQuotaBar(theme, remaining, width),
-		subtleStyle(palette).Render(fmt.Sprintf("%d%% used • resets %s", usedPct, resetStr)),
+		indent+windowStyle(palette).Render(name),
+		indent+renderQuotaBar(theme, w.Utilization, barWidth),
+		indent+subtleStyle(palette).Render(fmt.Sprintf("%d%% used • resets %s", usedPct, resetStr)),
 	)
 }
 
@@ -136,23 +169,24 @@ func renderExtraUsage(extra provider.ExtraUsage, width int, theme providerTheme,
 		return fmt.Sprintf("Spend: $%.2f", extra.UsedUSD)
 	}
 
-	remaining := clampPercent(1 - extra.Utilization)
 	heading := lipgloss.JoinHorizontal(
 		lipgloss.Center,
-		windowStyle(palette).Render("extra usage"),
+		windowStyle(palette).Render("Extra Usage"),
 		subtleStyle(palette).Render(" • "),
-		quotaLabelStyle(theme, remaining).Render(fmt.Sprintf("$%.2f / $%.2f", extra.UsedUSD, extra.LimitUSD)),
+		quotaLabelStyle(theme, extra.Utilization).Render(fmt.Sprintf("$%.2f / $%.2f", extra.UsedUSD, extra.LimitUSD)),
 	)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		heading,
-		renderQuotaBar(theme, remaining, width),
+		renderQuotaBar(theme, extra.Utilization, width),
 		subtleStyle(palette).Render(fmt.Sprintf("%d%% of spend limit used", percent(extra.Utilization))),
 	)
 }
 
-func renderQuotaBar(theme providerTheme, remaining float64, width int) string {
+// newProgressBar creates a progress.Model configured with the given provider theme.
+// Callers that store bars in the model use this to initialise new bars.
+func newProgressBar(theme providerTheme) progress.Model {
 	bar := progress.New(
 		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
 		progress.WithColorFunc(func(total, _ float64) color.Color {
@@ -161,27 +195,32 @@ func renderQuotaBar(theme providerTheme, remaining float64, width int) string {
 	)
 	bar.ShowPercentage = false
 	bar.EmptyColor = lipgloss.Color(theme.TrackHex)
-	barWidth := width - 10
-	if barWidth < 12 {
-		barWidth = 12
-	}
-	bar.SetWidth(barWidth)
-	return bar.ViewAs(remaining)
+	return bar
 }
 
-func quotaBarColorHex(theme providerTheme, remaining float64) string {
+// renderQuotaBar renders a static progress bar that fills as utilization increases.
+// Quota changes are infrequent, so direct ViewAs rendering is easier to read than
+// a spring animation.
+func renderQuotaBar(theme providerTheme, utilization float64, width int) string {
+	barWidth := max(width-10, 12)
+	b := newProgressBar(theme)
+	b.SetWidth(barWidth)
+	return b.ViewAs(utilization)
+}
+
+func quotaBarColorHex(theme providerTheme, utilization float64) string {
 	switch {
-	case remaining < 0.20:
+	case utilization > 0.80:
 		return dangerColorHex
-	case remaining < 0.50:
+	case utilization > 0.50:
 		return warningColorHex
 	default:
 		return theme.BarHex
 	}
 }
 
-func quotaLabelStyle(theme providerTheme, remaining float64) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(quotaBarColorHex(theme, remaining)))
+func quotaLabelStyle(theme providerTheme, utilization float64) lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(quotaBarColorHex(theme, utilization)))
 }
 
 func clampPercent(value float64) float64 {

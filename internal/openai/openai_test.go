@@ -185,11 +185,11 @@ func TestOpenAI_FetchQuota_currentUsageSchema(t *testing.T) {
 	if result.Windows[1].Name != "seven_day" {
 		t.Fatalf("Windows[1].Name = %q, want %q", result.Windows[1].Name, "seven_day")
 	}
-	if result.Windows[2].Name != "codex_bengalfox_five_hour" {
-		t.Fatalf("Windows[2].Name = %q, want %q", result.Windows[2].Name, "codex_bengalfox_five_hour")
+	if result.Windows[2].Name != "codex_spark_five_hour" {
+		t.Fatalf("Windows[2].Name = %q, want %q", result.Windows[2].Name, "codex_spark_five_hour")
 	}
-	if result.Windows[3].Name != "codex_bengalfox_seven_day" {
-		t.Fatalf("Windows[3].Name = %q, want %q", result.Windows[3].Name, "codex_bengalfox_seven_day")
+	if result.Windows[3].Name != "codex_spark_seven_day" {
+		t.Fatalf("Windows[3].Name = %q, want %q", result.Windows[3].Name, "codex_spark_seven_day")
 	}
 	if result.Windows[4].Name != "code_review_seven_day" {
 		t.Fatalf("Windows[4].Name = %q, want %q", result.Windows[4].Name, "code_review_seven_day")

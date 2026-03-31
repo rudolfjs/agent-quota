@@ -234,7 +234,9 @@ func (o *OpenAI) fetchUsage(ctx context.Context, accessToken string) (*usageResp
 		return nil, apierrors.NewAuthError("OpenAI authentication expired; attempting refresh", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, apierrors.NewAPIError("OpenAI usage API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr := apierrors.NewAPIError("OpenAI usage API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr.StatusCode = resp.StatusCode
+		return nil, apiErr
 	}
 
 	var usage usageResponse
@@ -461,6 +463,9 @@ func normalizePrefix(value string) string {
 	result := strings.Trim(b.String(), "_")
 	if result == "" {
 		return "limit"
+	}
+	if result == "codex_bengalfox" {
+		return "codex_spark"
 	}
 	return result
 }

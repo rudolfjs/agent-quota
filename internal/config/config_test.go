@@ -38,8 +38,8 @@ func TestLoad_missingFileReturnsEmptyConfig(t *testing.T) {
 	if cfg.TUI.RefreshMinutes != config.DefaultTUIRefreshMinutes {
 		t.Fatalf("TUI.RefreshMinutes = %d, want %d", cfg.TUI.RefreshMinutes, config.DefaultTUIRefreshMinutes)
 	}
-	if cfg.TUIRefreshInterval() != 5*time.Minute {
-		t.Fatalf("TUIRefreshInterval() = %v, want %v", cfg.TUIRefreshInterval(), 5*time.Minute)
+	if cfg.TUIRefreshInterval() != 15*time.Minute {
+		t.Fatalf("TUIRefreshInterval() = %v, want %v", cfg.TUIRefreshInterval(), 15*time.Minute)
 	}
 }
 
@@ -56,6 +56,24 @@ func TestLoad_normalizesProviders(t *testing.T) {
 	}
 
 	want := []string{"claude", "openai", "gemini"}
+	if !reflect.DeepEqual(cfg.Providers, want) {
+		t.Fatalf("Providers = %v, want %v", cfg.Providers, want)
+	}
+}
+
+func TestLoad_dropsRemovedJulesProviderFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"providers":["claude","jules","openai"]}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := []string{"claude", "openai"}
 	if !reflect.DeepEqual(cfg.Providers, want) {
 		t.Fatalf("Providers = %v, want %v", cfg.Providers, want)
 	}
@@ -95,6 +113,23 @@ func TestLoad_nonPositiveTUIRefreshMinutesUseDefault(t *testing.T) {
 
 	if cfg.TUI.RefreshMinutes != config.DefaultTUIRefreshMinutes {
 		t.Fatalf("TUI.RefreshMinutes = %d, want %d", cfg.TUI.RefreshMinutes, config.DefaultTUIRefreshMinutes)
+	}
+}
+
+func TestLoad_clampsTUIRefreshMinutesToMinimum(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"tui":{"refresh_minutes":5}}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.TUI.RefreshMinutes != config.MinimumTUIRefreshMinutes {
+		t.Fatalf("TUI.RefreshMinutes = %d, want %d", cfg.TUI.RefreshMinutes, config.MinimumTUIRefreshMinutes)
 	}
 }
 

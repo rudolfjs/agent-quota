@@ -48,7 +48,7 @@ jobs:
 
       - name: Run release verification checks
         run: |
-          sh -n install.sh
+          sh -n scripts/install.sh
           go test -race -count=1 ./...
           go build -o /tmp/agent-quota ./cmd/agent-quota/
 
@@ -184,4 +184,4 @@ jobs:
           body_path: release-notes.md
           files: |
             dist/*
-            install.sh
+            scripts/install.sh

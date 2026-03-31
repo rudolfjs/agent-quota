@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
@@ -217,7 +219,9 @@ func doJSONRequest[T any](ctx context.Context, client *http.Client, method, targ
 		return nil, apierrors.NewAuthError("Gemini authentication expired; refresh required", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, apierrors.NewAPIError("Gemini API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr := apierrors.NewAPIError("Gemini API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr.StatusCode = resp.StatusCode
+		return nil, apiErr
 	}
 
 	var out T
@@ -288,7 +292,17 @@ func convertQuota(loadResp *loadCodeAssistResponse, quotaResp *retrieveUserQuota
 	}
 
 	buckets := append([]quotaBucket(nil), quotaResp.Buckets...)
-	sort.Slice(buckets, func(i, j int) bool { return buckets[i].ModelID < buckets[j].ModelID })
+	sort.Slice(buckets, func(i, j int) bool {
+		iMaj, iMin := geminiModelVersion(buckets[i].ModelID)
+		jMaj, jMin := geminiModelVersion(buckets[j].ModelID)
+		if iMaj != jMaj {
+			return iMaj > jMaj // higher major version first (3.x before 2.x)
+		}
+		if iMin != jMin {
+			return iMin > jMin // higher minor version first
+		}
+		return geminiModelTypeRank(buckets[i].ModelID) < geminiModelTypeRank(buckets[j].ModelID)
+	})
 	for _, bucket := range buckets {
 		result.Windows = append(result.Windows, provider.Window{
 			Name:        bucket.ModelID,
@@ -372,6 +386,43 @@ func (c oauthCredentials) IsExpired() bool {
 	}
 	expiry := time.UnixMilli(c.ExpiryDate)
 	return time.Now().After(expiry.Add(-60 * time.Second))
+}
+
+// geminiModelVersion parses the major and minor version from a model ID like
+// "gemini-2.5-flash" → (2, 5). Returns (0, 0) for unrecognised IDs.
+func geminiModelVersion(modelID string) (major, minor int) {
+	if !strings.HasPrefix(modelID, "gemini-") {
+		return 0, 0
+	}
+	rest := strings.TrimPrefix(modelID, "gemini-")
+	// rest = "2.5-flash" — first segment before the next hyphen is the version.
+	hyphenIdx := strings.Index(rest, "-")
+	verStr := rest
+	if hyphenIdx >= 0 {
+		verStr = rest[:hyphenIdx]
+	}
+	parts := strings.SplitN(verStr, ".", 2)
+	major, _ = strconv.Atoi(parts[0])
+	if len(parts) == 2 {
+		minor, _ = strconv.Atoi(parts[1])
+	}
+	return major, minor
+}
+
+// geminiModelTypeRank returns a sort rank for the model variant so that
+// Pro < Flash < Flash Lite within the same version group.
+func geminiModelTypeRank(modelID string) int {
+	lower := strings.ToLower(modelID)
+	switch {
+	case strings.Contains(lower, "flash-lite") || strings.Contains(lower, "flash-8b"):
+		return 2
+	case strings.Contains(lower, "flash"):
+		return 1
+	case strings.Contains(lower, "pro"):
+		return 0
+	default:
+		return 3
+	}
 }
 
 var _ provider.Provider = (*Gemini)(nil)

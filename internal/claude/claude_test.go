@@ -66,12 +66,12 @@ func TestClaude_FetchQuota_success(t *testing.T) {
 	if result.Plan != "max" {
 		t.Errorf("Plan = %q, want %q", result.Plan, "max")
 	}
-	if len(result.Windows) != 5 {
-		t.Fatalf("len(Windows) = %d, want 5", len(result.Windows))
+	if len(result.Windows) != 3 {
+		t.Fatalf("len(Windows) = %d, want 3", len(result.Windows))
 	}
 
 	// Verify window names
-	wantNames := []string{"five_hour", "seven_day", "seven_day_oauth_apps", "seven_day_opus", "seven_day_sonnet"}
+	wantNames := []string{"five_hour", "seven_day", "seven_day_sonnet"}
 	for i, wn := range wantNames {
 		if result.Windows[i].Name != wn {
 			t.Errorf("Windows[%d].Name = %q, want %q", i, result.Windows[i].Name, wn)

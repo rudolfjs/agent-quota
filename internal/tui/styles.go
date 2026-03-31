@@ -11,6 +11,7 @@ import (
 const (
 	claudeColorHex    = "#DE7356"
 	geminiColorHex    = "#8B5CF6"
+	copilotColorHex   = "#60A5FA"
 	openAIColorHex    = "#FFFFFF"
 	openAIBarColorHex = "#9CA3AF"
 	successColorHex   = "#22C55E"
@@ -172,6 +173,30 @@ func themeForProvider(name string, palette appPalette) providerTheme {
 			ChipBGHex:  "#E9D5FF",
 			ChipFGHex:  "#581C87",
 		}
+
+	case "copilot":
+		if palette.IsDark {
+			return providerTheme{
+				BorderHex:  copilotColorHex,
+				TitleHex:   copilotColorHex,
+				BadgeBGHex: "#1E3A8A",
+				BadgeFGHex: "#DBEAFE",
+				BarHex:     copilotColorHex,
+				TrackHex:   "#334155",
+				ChipBGHex:  "#1E3A8A",
+				ChipFGHex:  "#DBEAFE",
+			}
+		}
+		return providerTheme{
+			BorderHex:  "#2563EB",
+			TitleHex:   "#2563EB",
+			BadgeBGHex: "#DBEAFE",
+			BadgeFGHex: "#1E3A8A",
+			BarHex:     copilotColorHex,
+			TrackHex:   "#E2E8F0",
+			ChipBGHex:  "#DBEAFE",
+			ChipFGHex:  "#1E3A8A",
+		}
 	default:
 		if palette.IsDark {
 			return providerTheme{
@@ -288,30 +313,6 @@ func providerChipStyle(theme providerTheme) lipgloss.Style {
 		Padding(0, 1)
 }
 
-func orderIdleTitleStyle(theme providerTheme) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.TitleHex))
-}
-
-func orderPickedTitleStyle(theme providerTheme) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.TitleHex))
-}
-
-func orderPickedAccentStyle(theme providerTheme) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.BorderHex))
-}
-
-func orderPickedBadgeStyle(theme providerTheme) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.BadgeFGHex)).
-		Background(lipgloss.Color(theme.BadgeBGHex)).
-		Padding(0, 1)
-}
-
-func orderDimmedStyle(palette appPalette) lipgloss.Style {
-	return subtleStyle(palette).Faint(true)
-}
-
 func menuBackdropStyle(palette appPalette, progress float64) lipgloss.Style {
 	style := lipgloss.NewStyle().Faint(true)
 	if progress < 1 {
@@ -374,6 +375,13 @@ func menuItemTitleStyle(palette appPalette) lipgloss.Style {
 		Padding(0, 0, 0, 1)
 }
 
+func menuSelectedSurfaceHex(palette appPalette) string {
+	if palette.IsDark {
+		return "#27272A"
+	}
+	return "#F1F5F9"
+}
+
 func menuItemDescStyle(palette appPalette) lipgloss.Style {
 	fg := palette.MutedHex
 	if palette.IsDark {
@@ -392,11 +400,9 @@ func menuSelectedTitleStyle(palette appPalette) lipgloss.Style {
 	}
 	return lipgloss.NewStyle().
 		Bold(true).
-		Border(lipgloss.Border{Left: "→"}, false, false, false, true).
-		BorderForeground(lipgloss.Color(palette.LogoBorderHex)).
 		Foreground(lipgloss.Color(fg)).
-		Background(lipgloss.Color(menuSurfaceHex(palette))).
-		Padding(0, 0, 0, 0)
+		Background(lipgloss.Color(menuSelectedSurfaceHex(palette))).
+		Padding(0, 0, 0, 1)
 }
 
 func menuSelectedDescStyle(palette appPalette) lipgloss.Style {
@@ -405,11 +411,29 @@ func menuSelectedDescStyle(palette appPalette) lipgloss.Style {
 		fg = "#A1A1AA"
 	}
 	return lipgloss.NewStyle().
-		Border(lipgloss.Border{Left: " "}, false, false, false, true).
-		BorderForeground(lipgloss.Color(palette.LogoBorderHex)).
+		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(menuSelectedSurfaceHex(palette))).
+		Padding(0, 0, 0, 3)
+}
+
+func quickViewMenuItemStyle(palette appPalette) lipgloss.Style {
+	fg := palette.TitleHex
+	if palette.IsDark {
+		fg = "#F8FAFC"
+	}
+	return lipgloss.NewStyle().
+		Bold(true).
 		Foreground(lipgloss.Color(fg)).
 		Background(lipgloss.Color(menuSurfaceHex(palette))).
-		Padding(0, 0, 0, 2)
+		Padding(0, 0, 0, 1)
+}
+
+func quickViewMenuSelectedItemStyle(theme providerTheme, palette appPalette) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.TitleHex)).
+		Background(lipgloss.Color(menuSelectedSurfaceHex(palette))).
+		Padding(0, 0, 0, 1)
 }
 
 func logoBarsView(palette appPalette) string {
@@ -418,5 +442,6 @@ func logoBarsView(palette appPalette) string {
 		providerTitleStyle(themeForProvider("claude", palette)).Render("▌"),
 		providerTitleStyle(themeForProvider("openai", palette)).Render("▌"),
 		providerTitleStyle(themeForProvider("gemini", palette)).Render("▌"),
+		providerTitleStyle(themeForProvider("copilot", palette)).Render("▌"),
 	)
 }

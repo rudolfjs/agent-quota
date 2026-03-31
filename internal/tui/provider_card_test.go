@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/schnetlerr/agent-quota/internal/provider"
 )
 
@@ -45,8 +46,8 @@ func TestRenderProviderCard_containsWindowName(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "five_hour") {
-		t.Errorf("expected card to contain window name 'five_hour', got:\n%s", got)
+	if !strings.Contains(got, "Session") {
+		t.Errorf("expected card to contain pretty window name 'Session', got:\n%s", got)
 	}
 }
 
@@ -66,9 +67,6 @@ func TestRenderProviderCard_containsRemainingAndUsedPercent(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "65% left") {
-		t.Errorf("expected card to contain remaining quota '65%% left', got:\n%s", got)
-	}
 	if !strings.Contains(got, "35% used") {
 		t.Errorf("expected card to contain utilization '35%% used', got:\n%s", got)
 	}
@@ -115,6 +113,50 @@ func TestRenderProviderCard_errorStatus(t *testing.T) {
 
 	if !strings.Contains(got, "ERROR") {
 		t.Errorf("expected card to contain 'ERROR', got:\n%s", got)
+	}
+}
+
+func TestRenderProviderCard_copilotUsesFriendlyName(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "copilot",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "premium_interactions",
+			Utilization: 0.25,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "Copilot") {
+		t.Errorf("expected card to contain provider name 'Copilot', got:\n%s", got)
+	}
+}
+
+func TestRenderProviderCard_openAICodexWindowsUseSparkDisplayName(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "openai",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "codex_bengalfox_five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+
+	if !strings.Contains(got, "Codex Spark") {
+		t.Fatalf("expected card to contain group header 'Codex Spark', got:\n%s", got)
+	}
+	if !strings.Contains(got, "Session") {
+		t.Fatalf("expected card to contain pretty metric name 'Session', got:\n%s", got)
+	}
+	if strings.Contains(got, "codex_bengalfox_five_hour") {
+		t.Fatalf("expected card not to contain legacy window name, got:\n%s", got)
 	}
 }
 
@@ -169,15 +211,20 @@ func TestRenderProviderCard_rendersFriendlyProviderHeader(t *testing.T) {
 	}
 
 	got := RenderProviderCard(r, 60)
+	plain := ansi.Strip(got)
+	normalized := strings.Join(strings.Fields(plain), " ")
 
-	if !strings.Contains(got, "◎ OpenAI") {
-		t.Fatalf("expected card to contain provider icon and friendly name '◎ OpenAI', got:\n%s", got)
+	if !strings.Contains(got, "OpenAI") {
+		t.Fatalf("expected card to contain friendly provider name 'OpenAI', got:\n%s", got)
 	}
 	if !strings.Contains(got, "PLUS") {
 		t.Fatalf("expected card to contain plan badge 'PLUS', got:\n%s", got)
 	}
 	if !strings.Contains(got, "OK") {
 		t.Fatalf("expected card to contain status badge 'OK', got:\n%s", got)
+	}
+	if !strings.Contains(normalized, "OpenAI PLUSOK") {
+		t.Fatalf("expected stripped header to include spacing before the joined badges, got:\n%s", plain)
 	}
 }
 
@@ -303,17 +350,14 @@ func TestRenderProviderCard_multipleWindows(t *testing.T) {
 
 	got := RenderProviderCard(r, 60)
 
-	if !strings.Contains(got, "five_hour") {
-		t.Errorf("expected card to contain 'five_hour', got:\n%s", got)
+	if !strings.Contains(got, "Session") {
+		t.Errorf("expected card to contain pretty name 'Session', got:\n%s", got)
 	}
-	if !strings.Contains(got, "seven_day") {
-		t.Errorf("expected card to contain 'seven_day', got:\n%s", got)
+	if !strings.Contains(got, "Weekly Limits") {
+		t.Errorf("expected card to contain group header 'Weekly Limits', got:\n%s", got)
 	}
-	if !strings.Contains(got, "65% left") {
-		t.Errorf("expected card to contain '65%% left', got:\n%s", got)
-	}
-	if !strings.Contains(got, "28% left") {
-		t.Errorf("expected card to contain '28%% left', got:\n%s", got)
+	if !strings.Contains(got, "All Models") {
+		t.Errorf("expected card to contain pretty name 'All Models', got:\n%s", got)
 	}
 	if !strings.Contains(got, "35% used") {
 		t.Errorf("expected card to contain '35%% used', got:\n%s", got)

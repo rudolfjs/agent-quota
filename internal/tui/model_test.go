@@ -7,19 +7,24 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
+	"github.com/schnetlerr/agent-quota/internal/config"
+	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
 	"github.com/schnetlerr/agent-quota/internal/provider"
 )
 
 // stubProvider implements provider.Provider for testing.
 type stubProvider struct {
-	name   string
-	result provider.QuotaResult
-	err    error
+	name       string
+	result     provider.QuotaResult
+	err        error
+	fetchCalls int
 }
 
 func (s *stubProvider) Name() string { return s.name }
 func (s *stubProvider) FetchQuota(_ context.Context) (provider.QuotaResult, error) {
+	s.fetchCalls++
 	return s.result, s.err
 }
 func (s *stubProvider) Available() bool { return true }
@@ -40,8 +45,8 @@ func TestNew_returnsModelWithProviders(t *testing.T) {
 	if m.pending != 1 {
 		t.Fatalf("pending = %d, want 1", m.pending)
 	}
-	if m.refreshInterval != 5*time.Minute {
-		t.Fatalf("refreshInterval = %v, want %v", m.refreshInterval, 5*time.Minute)
+	if m.refreshInterval != 15*time.Minute {
+		t.Fatalf("refreshInterval = %v, want %v", m.refreshInterval, 15*time.Minute)
 	}
 }
 
@@ -112,6 +117,113 @@ func TestUpdate_fetchErrorMsg_storesError(t *testing.T) {
 	}
 	if model.pending != 0 {
 		t.Fatalf("pending = %d, want 0", model.pending)
+	}
+}
+
+func TestNew_seedsCachedResults(t *testing.T) {
+	reset := time.Now().Add(2 * time.Hour)
+	cached := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Plan:     "max",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    reset,
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	m := New([]provider.Provider{&stubProvider{name: "claude"}}, WithCachedResults(map[string]provider.QuotaResult{"claude": cached}))
+
+	got, ok := m.results["claude"]
+	if !ok {
+		t.Fatal("expected cached result for claude to be seeded into model")
+	}
+	if got.Plan != "max" {
+		t.Fatalf("cached plan = %q, want max", got.Plan)
+	}
+	if !strings.Contains(m.bodyContent(), "35% used") {
+		t.Fatalf("bodyContent() = %q, want cached quota bars to render", m.bodyContent())
+	}
+}
+
+func TestProviderChipsView_defaultListExcludesJules(t *testing.T) {
+	got := ansi.Strip(providerChipsView(newPalette(true), nil))
+
+	if strings.Contains(got, "Jules") {
+		t.Fatalf("providerChipsView() = %q, want Jules omitted from default chips", got)
+	}
+	for _, want := range []string{"Claude", "OpenAI", "Gemini", "Copilot"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("providerChipsView() = %q, want %q chip", got, want)
+		}
+	}
+}
+
+func TestUpdate_fetchErrorMsg_retryableKeepsCachedResultVisible(t *testing.T) {
+	reset := time.Now().Add(2 * time.Hour)
+	cached := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    reset,
+		}},
+		FetchedAt: time.Now(),
+	}
+	m := New([]provider.Provider{&stubProvider{name: "claude"}}, WithCachedResults(map[string]provider.QuotaResult{"claude": cached}))
+	m.retryBackoff = func(string, int, time.Duration) time.Duration { return 2 * time.Minute }
+
+	rateErr := apierrors.NewAPIError("rate limited", context.DeadlineExceeded)
+	rateErr.StatusCode = 429
+
+	updated, _ := m.Update(fetchErrorMsg{providerName: "claude", err: rateErr})
+	model := updated.(Model)
+
+	if _, ok := model.results["claude"]; !ok {
+		t.Fatal("expected retryable error to keep cached result visible")
+	}
+	rs, ok := model.retryStates["claude"]
+	if !ok {
+		t.Fatal("expected retry state to be recorded")
+	}
+	if rs.secondsLeft != 120 {
+		t.Fatalf("secondsLeft = %d, want 120", rs.secondsLeft)
+	}
+	if rs.attempt != 1 {
+		t.Fatalf("attempt = %d, want 1", rs.attempt)
+	}
+	if _, ok := model.errors["claude"]; ok {
+		t.Fatal("expected retryable error not to replace cached result with an error card")
+	}
+	body := model.bodyContent()
+	if !strings.Contains(body, "35% used") {
+		t.Fatalf("bodyContent() = %q, want cached quota bars to remain visible", body)
+	}
+	if !strings.Contains(body, "Retrying in 2m") {
+		t.Fatalf("bodyContent() = %q, want retry countdown", body)
+	}
+}
+
+func TestUpdate_fetchErrorMsg_retryableHonorsRetryAfter(t *testing.T) {
+	m := New([]provider.Provider{&stubProvider{name: "claude"}})
+	m.retryBackoff = func(string, int, time.Duration) time.Duration { return time.Minute }
+
+	rateErr := apierrors.NewAPIError("rate limited", context.DeadlineExceeded)
+	rateErr.StatusCode = 429
+	rateErr.RetryAfter = 90 * time.Second
+
+	updated, _ := m.Update(fetchErrorMsg{providerName: "claude", err: rateErr})
+	model := updated.(Model)
+
+	rs := model.retryStates["claude"]
+	if rs.secondsLeft != 90 {
+		t.Fatalf("secondsLeft = %d, want 90", rs.secondsLeft)
+	}
+	if !strings.Contains(model.bodyContent(), "Retrying in 1m 30s") {
+		t.Fatalf("bodyContent() = %q, want retry-after countdown", model.bodyContent())
 	}
 }
 
@@ -236,6 +348,33 @@ func TestUpdate_refreshTickStartsFetchWhenIdle(t *testing.T) {
 	}
 }
 
+func TestUpdate_refreshTickSkipsProvidersInRetryBackoff(t *testing.T) {
+	claudeProvider := &stubProvider{name: "claude"}
+	openAIProvider := &stubProvider{name: "openai"}
+	m := New([]provider.Provider{claudeProvider, openAIProvider}, WithRefreshInterval(4*time.Minute))
+	m.pending = 0
+	m.tick = nil
+	m.retryStates["claude"] = retryState{statusCode: 429, secondsLeft: 600, attempt: 1, generation: 1}
+
+	updated, cmd := m.Update(refreshTickMsg{})
+	model := updated.(Model)
+
+	if model.pending != 1 {
+		t.Fatalf("pending = %d, want 1", model.pending)
+	}
+	if cmd == nil {
+		t.Fatal("expected refresh tick to fetch non-backed-off providers")
+	}
+
+	_ = cmd()
+	if claudeProvider.fetchCalls != 0 {
+		t.Fatalf("claude fetchCalls = %d, want 0", claudeProvider.fetchCalls)
+	}
+	if openAIProvider.fetchCalls != 1 {
+		t.Fatalf("openai fetchCalls = %d, want 1", openAIProvider.fetchCalls)
+	}
+}
+
 func TestUpdate_refreshTickSkipsFetchWhilePending(t *testing.T) {
 	p := &stubProvider{name: "claude"}
 	m := New([]provider.Provider{p}, WithRefreshInterval(time.Minute))
@@ -284,11 +423,46 @@ func TestView_showsSpinnerNextToAutoRefreshStatus(t *testing.T) {
 	m := New(nil, WithRefreshInterval(7*time.Minute), WithDarkBackground(true))
 
 	v := m.View()
-	if !strings.Contains(v.Content, "Auto-refresh every 7m") {
-		t.Fatalf("View() = %q, want auto-refresh status", v.Content)
+	if !strings.Contains(v.Content, "refresh in") {
+		t.Fatalf("View() = %q, want countdown refresh status", v.Content)
+	}
+	if !strings.Contains(v.Content, "(ctrl+r)") {
+		t.Fatalf("View() = %q, want manual refresh hint next to timer", v.Content)
 	}
 	if !strings.Contains(v.Content, m.spinner.View()) {
 		t.Fatalf("View() = %q, want spinner %q next to refresh status", v.Content, m.spinner.View())
+	}
+}
+
+func TestUpdate_ctrlRTriggersManualRefreshWhenIdle(t *testing.T) {
+	p := &stubProvider{name: "claude", result: provider.QuotaResult{Provider: "claude", Status: "ok", FetchedAt: time.Now()}}
+	m := New([]provider.Provider{p}, WithRefreshInterval(7*time.Minute))
+	m.pending = 0
+
+	var got time.Duration
+	m.tick = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+		got = d
+		return func() tea.Msg { return fn(time.Unix(0, 0)) }
+	}
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	m = updated.(Model)
+
+	if m.pending != 1 {
+		t.Fatalf("pending = %d, want 1", m.pending)
+	}
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to schedule refresh commands")
+	}
+	if got != 7*time.Minute {
+		t.Fatalf("tick duration = %v, want %v", got, 7*time.Minute)
+	}
+	msgs := runCmd(cmd)
+	if p.fetchCalls != 1 {
+		t.Fatalf("fetchCalls = %d, want 1", p.fetchCalls)
+	}
+	if len(msgs) == 0 {
+		t.Fatal("expected ctrl+r refresh to emit messages")
 	}
 }
 
@@ -353,6 +527,42 @@ func TestView_showsScrollbarWhenContentOverflows(t *testing.T) {
 	v := m.View()
 	if !strings.Contains(v.Content, "█") {
 		t.Fatalf("View() = %q, want scrollbar thumb", v.Content)
+	}
+}
+
+func TestUpdate_tabTogglesQuickViewAndRendersSelectedMetrics(t *testing.T) {
+	cached := map[string]provider.QuotaResult{
+		"claude": {
+			Provider: "claude",
+			Status:   "ok",
+			Windows: []provider.Window{{
+				Name:        "five_hour",
+				Utilization: 0.35,
+				ResetsAt:    time.Now().Add(2 * time.Hour),
+			}},
+			FetchedAt: time.Now(),
+		},
+	}
+	m := New(
+		[]provider.Provider{&stubProvider{name: "claude"}},
+		WithCachedResults(cached),
+		WithSettings(config.Settings{QuickView: []string{"claude:five_hour"}}, func(config.Settings) error { return nil }),
+	)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(Model)
+
+	body := ansi.Strip(m.bodyContent())
+	if !strings.Contains(body, "Claude • Session") {
+		t.Fatalf("bodyContent() = %q, want quick view metric heading", body)
+	}
+	if !strings.Contains(body, "35% used") {
+		t.Fatalf("bodyContent() = %q, want quick view used label", body)
+	}
+	if !strings.Contains(m.footerText(), "full view") {
+		t.Fatalf("footerText() = %q, want quick view toggle hint", m.footerText())
 	}
 }
 
