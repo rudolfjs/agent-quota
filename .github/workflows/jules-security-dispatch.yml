@@ -1,0 +1,126 @@
+name: Jules Security Review
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  security-review:
+    runs-on: ubuntu-latest
+    # Trigger on @jules-security comments from org members/owners/collaborators only
+    if: >
+      contains(github.event.comment.body, '@jules-security') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Fetch issue context
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --json title,body,labels \
+            --jq '{title, body, labels: [.labels[].name]}' > /tmp/issue.json
+
+          ISSUE_TITLE=$(jq -r '.title' /tmp/issue.json)
+          ISSUE_BODY=$(jq -r '.body // "No description provided."' /tmp/issue.json)
+          ISSUE_LABELS=$(jq -r '.labels | join(", ")' /tmp/issue.json)
+
+          # Use random delimiters to prevent injection via crafted issue content
+          DELIM=$(openssl rand -hex 8)
+
+          {
+            echo "title<<$DELIM"
+            echo "$ISSUE_TITLE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<$DELIM"
+            echo "$ISSUE_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "labels=$ISSUE_LABELS" >> "$GITHUB_OUTPUT"
+
+      - name: Detect PR branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # PR comments arrive as issue_comment events — check if it's a PR
+          BRANCH=$(gh pr view "$ISSUE_NUMBER" --repo "$REPO" \
+            --json headRefName --jq '.headRefName' 2>/dev/null || echo "main")
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Jules — Security Review
+        uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046  # main
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ steps.branch.outputs.name }}
+          include_commit_log: true
+          require_plan_approval: false
+          title: "Security: ${{ steps.issue.outputs.title }}"
+          prompt: |
+            You are a Security Engineer performing a thorough security review of
+            agent-quota — a Go CLI tool that fetches AI provider usage/quota data.
+            It features a pretty TUI for humans and headless JSON output for scripts/agents.
+
+            ## Scope of review
+            - cmd/agent-quota/ — CLI entrypoint, cobra + fang wiring, provider registration
+            - internal/cli/   — CLI commands, flag definitions, output mode resolution
+            - internal/provider/ — Provider interface, registry, domain types
+            - internal/claude/ — Claude OAuth API client, credential reading, token refresh
+            - internal/tui/   — Bubbletea v2 TUI model, provider cards, lipgloss styles
+            - internal/output/ — JSON and text formatters for headless mode
+            - internal/errors/ — Domain error types (auth, network, api, config)
+            - internal/version/ — Build-time version injection, claude CLI version detection
+
+            ## Security areas to assess
+            1. **Credential handling** — OAuth access tokens read from ~/.claude/.credentials.json,
+               token refresh via CLI exec, ensure tokens are never logged or exposed in error messages,
+               file permissions on credential files
+            2. **Input validation** — CLI flag parsing, provider name validation, API response parsing,
+               ensure no injection vectors via user-supplied provider names or config values
+            3. **Network security** — HTTPS enforcement for API calls, TLS certificate validation,
+               timeout handling, response size limits to prevent resource exhaustion
+            4. **Error handling** — domain error types must sanitize internal details before user display,
+               no raw error strings containing tokens or internal paths exposed to users
+            5. **Supply chain** — pinned vs floating dependency versions in go.mod, GitHub Actions
+               workflow permissions, third-party action pinning by SHA
+
+            ## GitHub Issue #${{ github.event.issue.number }}: ${{ steps.issue.outputs.title }}
+
+            Labels: ${{ steps.issue.outputs.labels }}
+
+            ${{ steps.issue.outputs.body }}
+
+            ## Triggering comment
+
+            ${{ github.event.comment.body }}
+
+            ## Instructions
+            Identify concrete vulnerabilities or misconfigurations related to the issue above,
+            assess their severity (Critical / High / Medium / Low), and implement fixes where possible.
+            Where a fix requires broader architectural change, document the finding clearly
+            with remediation guidance and open the PR with what can be safely automated.
+
+            Follow secure-by-default principles: fail closed, least privilege, no secrets in logs.
+
+      - name: React to confirm dispatch
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -X POST -f content='rocket'
