@@ -48,10 +48,23 @@ jobs:
 
           echo "labels=$ISSUE_LABELS" >> "$GITHUB_OUTPUT"
 
+      - name: Detect PR branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # PR comments arrive as issue_comment events — check if it's a PR
+          BRANCH=$(gh pr view "$ISSUE_NUMBER" --repo "$REPO" \
+            --json headRefName --jq '.headRefName' 2>/dev/null || echo "main")
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
       - name: Invoke Jules — Security Review
         uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046  # main
         with:
           jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ steps.branch.outputs.name }}
           include_commit_log: true
           require_plan_approval: false
           title: "Security: ${{ steps.issue.outputs.title }}"
