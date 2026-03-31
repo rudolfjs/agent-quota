@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: read
     steps:
       - name: Fetch issue context
         id: issue
