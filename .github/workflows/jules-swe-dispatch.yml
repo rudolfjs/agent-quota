@@ -1,0 +1,201 @@
+name: Jules SWE
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  swe:
+    runs-on: ubuntu-latest
+    # Trigger on @jules-swe comments from owners/members only (not @jules-security)
+    if: >
+      contains(github.event.comment.body, '@jules-swe') &&
+      !contains(github.event.comment.body, '@jules-security') &&
+      contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Fetch issue context
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --json title,body,labels \
+            --jq '{title, body, labels: [.labels[].name]}' > /tmp/issue.json
+
+          ISSUE_TITLE=$(jq -r '.title' /tmp/issue.json)
+          ISSUE_BODY=$(jq -r '.body // "No description provided."' /tmp/issue.json)
+          ISSUE_LABELS=$(jq -r '.labels | join(", ")' /tmp/issue.json)
+
+          # Use random delimiters to prevent injection via crafted issue/comment content
+          DELIM=$(openssl rand -hex 8)
+
+          {
+            echo "title<<$DELIM"
+            echo "$ISSUE_TITLE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<$DELIM"
+            echo "$ISSUE_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "labels<<$DELIM"
+            echo "$ISSUE_LABELS"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "comment_body<<$DELIM"
+            echo "$COMMENT_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Use PR's head branch if triggered from a PR; fall back to main for issues
+          BRANCH=$(gh pr view "$ISSUE_NUMBER" --repo "$REPO" \
+            --json headRefName --jq '.headRefName' 2>/dev/null || echo "main")
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Jules — SWE
+        uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046  # main
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ steps.branch.outputs.name }}
+          include_commit_log: true
+          require_plan_approval: false
+          title: "${{ steps.issue.outputs.title }}"
+          prompt: |
+            You are a Software Engineer working on **agent-quota**, a Go 1.25 CLI that
+            fetches AI-provider usage/quota data. It renders a Bubbletea v2 TUI for
+            humans and headless JSON for scripts/agents.
+
+            Implement the request in the issue below. Produce working, tested Go code
+            that follows all codebase conventions, then open a PR with a conventional
+            commit message.
+
+            ## Architecture
+
+            | Layer | Package | Purpose |
+            |-------|---------|---------|
+            | Entrypoint | `cmd/agent-quota/` | Cobra + Fang wiring, provider registration |
+            | CLI | `internal/cli/` | Commands, flags, output mode resolution |
+            | Providers | `internal/provider/` | Provider interface, registry, QuotaResult |
+            | TUI | `internal/tui/` | Bubbletea v2 model, provider cards, lipgloss |
+            | Output | `internal/output/` | JSON + text formatters for headless mode |
+            | Errors | `internal/errors/` | DomainError — the user-facing trust boundary |
+            | File I/O | `internal/fileutil/` | AtomicWriteFile (0o600), permission checks |
+
+            ## Adding a new provider
+
+            1. Create `internal/<name>/` package
+            2. Implement the `provider.Provider` interface:
+               ```go
+               type Provider interface {
+                   Name() string
+                   FetchQuota(ctx context.Context) (*QuotaResult, error)
+                   Available() bool
+               }
+               ```
+            3. Register in `cmd/agent-quota/main.go`:
+               `registry.Register(<name>.New())`
+
+            ## TDD — mandatory order
+
+            Write the `_test.go` file first, watch it fail, then implement.
+            Every new package needs at least one test file.
+
+            - HTTP interactions: `net/http/httptest`
+            - File I/O: `t.TempDir()`
+            - Context: `t.Context()` — never `context.WithTimeout` in tests
+            - TUI: `tea.NewProgram` with `tea.WithInput`, `tea.WithOutput`,
+              `tea.WithContext`
+
+            ## Error handling
+
+            All errors that cross a trust boundary (reach the user or leave a package)
+            must be wrapped as `internal/errors.DomainError`:
+
+            - `DomainError.Message` — safe user-facing text
+            - `DomainError.Cause` — raw error, logged only via `slog.Debug(..., "error", err.Cause)`
+            - Never call `err.Error()` in user-visible output
+            - Never log tokens or credential values, even partially — redact as `[REDACTED]`
+
+            ## Charm TUI v2 — import paths matter
+
+            Always import from `charm.land/*` v2 — never `github.com/charmbracelet/*`:
+
+            ```go
+            import (
+                tea "charm.land/bubbletea/v2"
+                lg  "charm.land/lipgloss/v2"
+                // bubbles: charm.land/bubbles/v2/<component>
+            )
+            ```
+
+            Key API differences from v1:
+            - `View()` must return `tea.View` via `tea.NewView(s)`, not a raw string
+            - `tea.Quit` is a value (no parentheses), not a function call
+            - Key presses use `tea.KeyPressMsg`, not `tea.KeyMsg`
+            - AltScreen: `v.AltScreen = true` on the View struct
+
+            Sub-components (spinner, progress, etc.) still return `string` from `View()`;
+            only the root model returns `tea.View`.
+
+            ## Modern Go (1.25)
+
+            - `slices` and `maps` stdlib packages for collection operations
+            - `errors.As` / `errors.Is` for error inspection — no type assertions
+            - `log/slog` for all diagnostics — never `fmt.Printf` or `log.*`
+            - Structured fields: `slog.String("provider", name)`, `slog.Int("code", n)`
+            - No `ioutil` or other deprecated stdlib
+
+            ## Conventional commits
+
+            `feat|fix|docs|chore|refactor|test|ci(scope): description`
+
+            Examples:
+            - `feat(provider): add Gemini usage provider`
+            - `fix(claude): handle token expiry on first fetch`
+            - `test(tui): add spinner model unit tests`
+
+            ## Fang + Cobra
+
+            The CLI uses `charm.land/fang/v2`. Do not set `SilenceUsage` or
+            `SilenceErrors` — fang handles that. Wrap commands with:
+            `fang.Execute(ctx, rootCmd, ...options)`
+
+            ## Task
+
+            **Issue #${{ github.event.issue.number }}**: ${{ steps.issue.outputs.title }}
+            **Labels**: ${{ steps.issue.outputs.labels }}
+
+            ${{ steps.issue.outputs.body }}
+
+            **Additional context from comment**: ${{ steps.issue.outputs.comment_body }}
+
+      - name: React to confirm dispatch
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -X POST -f content='rocket'
