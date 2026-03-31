@@ -1,0 +1,105 @@
+name: Jules Security Review
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  security-review:
+    runs-on: ubuntu-latest
+    # Trigger on @jules-security comments from org members/owners/collaborators only
+    if: >
+      contains(github.event.comment.body, '@jules-security') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Fetch issue context
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --json title,body,labels \
+            --jq '{title, body, labels: [.labels[].name]}' > /tmp/issue.json
+
+          ISSUE_TITLE=$(jq -r '.title' /tmp/issue.json)
+          ISSUE_BODY=$(jq -r '.body // "No description provided."' /tmp/issue.json)
+          ISSUE_LABELS=$(jq -r '.labels | join(", ")' /tmp/issue.json)
+
+          {
+            echo "title<<ISSUE_EOF"
+            echo "$ISSUE_TITLE"
+            echo "ISSUE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<ISSUE_EOF"
+            echo "$ISSUE_BODY"
+            echo "ISSUE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "labels=$ISSUE_LABELS" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Jules — Security Review
+        uses: nq-rdl/jules-action@main
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          include_commit_log: true
+          require_plan_approval: false
+          title: "Security: ${{ steps.issue.outputs.title }}"
+          prompt: |
+            You are a Security Engineer performing a thorough security review of the
+            RDL Data Platform — an Infrastructure as Code monorepo covering bare metal
+            provisioning, Kubernetes bootstrapping, and platform services.
+
+            ## Scope of review
+            - ansible/       — Hypervisor layer: libvirt VM provisioning, RKE2 bootstrap, OS config
+            - terraform/     — Bootstrap module: Vault auth, ArgoCD registration, S3/Vault connectivity
+            - argocd/        — App-of-apps: platform services, sync waves, Helm values
+            - src/da/        — Python package
+
+            ## Security areas to assess
+            1. **Secrets and credentials** — hardcoded secrets, plaintext passwords, unencrypted
+               vault strings, overly broad IAM/RBAC permissions, exposed API keys in vars or templates
+            2. **IaC misconfigurations** — insecure defaults in Ansible roles (world-readable files,
+               weak SSH config, disabled SELinux/firewalld), Terraform resources with public exposure,
+               missing encryption at rest or in transit
+            3. **Kubernetes security** — privileged containers, missing Pod Security Standards,
+               overly permissive NetworkPolicies, ServiceAccount token automounting, insecure Helm values
+            4. **Supply chain** — pinned vs floating action/image versions, unverified external sources
+               in requirements.yml, container image provenance
+            5. **Proxy and network** — corporate proxy handling (proxy_url), TLS certificate validation,
+               RKE2 TLS SANs, exposed service endpoints
+
+            ## GitHub Issue #${{ github.event.issue.number }}: ${{ steps.issue.outputs.title }}
+
+            Labels: ${{ steps.issue.outputs.labels }}
+
+            ${{ steps.issue.outputs.body }}
+
+            ## Triggering comment
+
+            ${{ github.event.comment.body }}
+
+            ## Instructions
+            Identify concrete vulnerabilities or misconfigurations related to the issue above,
+            assess their severity (Critical / High / Medium / Low), and implement fixes where possible.
+            Where a fix requires broader architectural change, document the finding clearly
+            with remediation guidance and open the PR with what can be safely automated.
+
+            Follow secure-by-default principles: fail closed, least privilege, no secrets in logs.
+
+      - name: React to confirm dispatch
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -X POST -f content='rocket'
