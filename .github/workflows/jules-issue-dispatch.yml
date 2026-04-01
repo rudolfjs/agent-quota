@@ -7,14 +7,14 @@ on:
 jobs:
   issue:
     runs-on: ubuntu-latest
-    # Trigger on @jules-issue comments from owners/members only
+    # Trigger on @jules-issue comments from owners/members on issues only
     if: >
       contains(github.event.comment.body, '@jules-issue') &&
+      github.event.issue.pull_request == null &&
       contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
     permissions:
       contents: read
       issues: write
-      pull-requests: read
     steps:
       - name: Fetch issue context
         id: issue
