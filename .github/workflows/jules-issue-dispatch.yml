@@ -1,0 +1,193 @@
+name: Jules Issue Triage
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    # Trigger on @jules-issue comments from owners/members only
+    if: >
+      contains(github.event.comment.body, '@jules-issue') &&
+      contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Fetch issue context
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --json title,body,labels \
+            --jq '{title, body, labels: [.labels[].name]}' > /tmp/issue.json
+
+          ISSUE_TITLE=$(jq -r '.title' /tmp/issue.json)
+          ISSUE_BODY=$(jq -r '.body // "No description provided."' /tmp/issue.json)
+          ISSUE_LABELS=$(jq -r '.labels | join(", ")' /tmp/issue.json)
+
+          # Use random delimiters to prevent injection via crafted issue/comment content
+          DELIM=$(openssl rand -hex 8)
+
+          {
+            echo "title<<$DELIM"
+            echo "$ISSUE_TITLE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<$DELIM"
+            echo "$ISSUE_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "labels<<$DELIM"
+            echo "$ISSUE_LABELS"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "comment_body<<$DELIM"
+            echo "$COMMENT_BODY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Jules — Issue Triage
+        uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046
+        with:
+          jules_api_key: ${{ secrets.JULES_API_TOKEN }}
+          include_commit_log: true
+          require_plan_approval: false
+          title: "Issue: ${{ steps.issue.outputs.title }}"
+          prompt: |
+            You are an Engineering Triage Lead working on **agent-quota**, a Go 1.25 CLI
+            that fetches AI-provider usage and quota data. It provides a Bubbletea v2 TUI
+            for humans and headless JSON output for scripts and agents.
+
+            You are performing **issue triage only** for this repository.
+
+            Do NOT modify code, create commits, create branches, open or update a pull
+            request, or claim that fixes have been implemented. Your deliverable is a
+            structured assessment that helps a human decide the next action.
+
+            ## Repository architecture
+
+            - `cmd/agent-quota/` — Cobra + Fang entrypoint and provider registration
+            - `internal/cli/` — CLI commands, flags, output-mode resolution
+            - `internal/provider/` — provider interface, registry, domain types
+            - `internal/claude/` — Claude OAuth client and credential refresh
+            - `internal/tui/` — Bubbletea v2 TUI model and styles
+            - `internal/output/` — JSON and text output formatters
+            - `internal/errors/` — domain errors and trust-boundary handling
+            - `internal/version/` — build version and Claude CLI version detection
+
+            ## Codebase constraints
+
+            - Go 1.25
+            - Bubbletea, Bubbles, Lip Gloss, and Fang must use `charm.land/*` v2 imports
+            - User-facing errors must use domain error types from `internal/errors`
+            - Never log or expose tokens, credentials, or raw secret values
+            - Use `log/slog` for diagnostics
+            - Tests use `t.Context()` and repo-standard Go testing patterns
+
+            ## Triage checks
+
+            Review the issue against this repository and produce a structured triage
+            assessment covering all of the following:
+
+            1. **Verdict** — classify the issue as one of:
+               - Ready for implementation
+               - Needs clarification
+               - Duplicate or already covered
+               - Out of scope for this repository
+               - Blocked by dependency or external decision
+               - Needs human design or product input
+
+            2. **Scope assessment** — explain whether the requested work belongs in this
+               repository. If only part of the issue is in scope, separate the in-repo and
+               out-of-repo concerns.
+
+            3. **Clarity check** — identify missing reproduction details, expected
+               behaviour, logs, screenshots, examples, or acceptance criteria. If the issue
+               is not yet actionable, say exactly what information is missing.
+
+            4. **Likely code areas** — identify the most likely packages, files,
+               functions, tests, workflows, or docs that would be involved. Distinguish
+               clearly between confirmed evidence and likely touch points.
+
+            5. **Risk and blast radius** — assess likely risk as low, medium, or high,
+               and note any impact on providers, authentication, credential handling,
+               output contracts, CLI behaviour, TUI behaviour, workflows, or security.
+
+            6. **Related work and duplication** — call out obvious duplicates, overlaps,
+               dependencies, or follow-up work only where the available evidence supports
+               it. If you cannot verify duplication from the available context, say so
+               explicitly rather than guessing.
+
+            7. **Routing recommendation** — recommend the most appropriate next owner and
+               trigger:
+               - `@jules-swe` for code changes in this repo
+               - `@jules-security` for security review or remediation
+               - human follow-up when clarification, design, or external coordination is required
+
+            8. **Task sizing** — state whether the work looks suitable for a single PR or
+               should be split into smaller tasks. If it should be split, suggest the split
+               boundaries.
+
+            9. **Implementation plan** — if the issue is ready, provide a short,
+               concrete, ordered plan covering investigation, implementation, tests, and
+               validation.
+
+            10. **Acceptance criteria** — if the issue is ready, propose clear checks
+                that a follow-up implementation should satisfy.
+
+            Respond using this exact structure:
+
+            ## Verdict
+            ## Scope assessment
+            ## Clarity and missing information
+            ## Likely code areas
+            ## Risk and blast radius
+            ## Related issues or dependencies
+            ## Recommended next action
+            ## Proposed implementation plan
+            ## Likely file targets
+            ## Acceptance criteria
+
+            Under **Likely file targets**, use these sub-headings when applicable:
+            - Existing files likely touched
+            - Possible new files
+            - Tests likely required
+
+            Under **Recommended next action**, include a copy-pasteable follow-up comment
+            when appropriate, for example `@jules-swe implement using this triage plan`.
+
+            Prefer evidence over confidence. If something is uncertain, say so plainly.
+            Keep the assessment concise, decision-oriented, and useful to a team lead.
+
+            ## Triggering issue context
+
+            **Issue #${{ github.event.issue.number }}**: ${{ steps.issue.outputs.title }}
+            **Labels**: ${{ steps.issue.outputs.labels }}
+
+            ${{ steps.issue.outputs.body }}
+
+            **Comment**: ${{ steps.issue.outputs.comment_body }}
+
+      - name: React to confirm dispatch
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -X POST -f content='rocket'
