@@ -63,7 +63,7 @@ jobs:
       - name: Invoke Jules — Issue Triage
         uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046
         with:
-          jules_api_key: ${{ secrets.JULES_API_TOKEN }}
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
           include_commit_log: true
           require_plan_approval: false
           title: "Issue: ${{ steps.issue.outputs.title }}"
