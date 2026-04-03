@@ -3,31 +3,34 @@
 CLI tool that fetches AI provider usage/quota data.
 Pretty TUI for humans, headless JSON for scripts and agents.
 
+> Linux x86_64 only for now.
+> The supported install paths in this repo target Linux x86_64 only. Manual `go build` / `go install` may still work on other platforms, but that is unsupported.
+
 ## Install
 
 ### Prebuilt binary
 
 The standard release path is:
-- GitHub Actions builds binaries on tagged releases
+- GitHub Actions builds Linux x86_64 binaries on tagged releases
 - GitHub Releases hosts the archives and checksums
-- `install.sh` downloads the correct archive for your OS/arch
+- `install.sh` downloads the correct archive for Linux x86_64
 
-Install the latest release to `~/.local/bin`:
+Install the latest Linux x86_64 release to `~/.local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | sh
 ```
 
-Install to `/usr/local/bin` instead:
+Install the latest Linux x86_64 release to `/usr/local/bin` instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
 ```
 
-Install a specific version:
+Install a specific Linux x86_64 release version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
 ```
 
 Skip the confirmation prompt (for CI / scripts):
@@ -38,11 +41,15 @@ curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts
 
 ### Install with Go
 
+This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
+
 ```bash
 go install github.com/schnetlerr/agent-quota/cmd/agent-quota@latest
 ```
 
 ### Build from source
+
+Manual builds may compile on other platforms, but Linux x86_64 is the only supported target for now.
 
 ```bash
 go build -o agent-quota ./cmd/agent-quota/
@@ -103,37 +110,4 @@ make release-check
 make build
 ```
 
-## Changelog workflow
-
-This repo uses `changie`.
-
-### For normal PRs
-
-Add one unreleased fragment per logical change:
-
-```bash
-changie new --interactive=false --kind Added --body 'New `agent-quota` feature description'
-```
-
-### For releases
-
-1. Batch unreleased entries into a release file:
-
-```bash
-changie batch 0.1.0
-```
-
-2. Merge release notes into `CHANGELOG.md`:
-
-```bash
-changie merge
-```
-
-3. Commit those files, then tag the commit already merged to `main` and push:
-
-```bash
-git tag v0.1.0
-git push origin main --tags
-```
-
-The GitHub release workflow verifies the tag commit is on `main`, rebuilds from GitHub-hosted runners, and publishes release assets.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development, changie, and release workflow.

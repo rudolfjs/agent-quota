@@ -74,16 +74,14 @@ download() {
 detect_os() {
   case $(uname -s) in
     Linux)  echo linux ;;
-    Darwin) echo darwin ;;
-    *)      fail "unsupported operating system: $(uname -s)" ;;
+    *)      fail "unsupported operating system: $(uname -s) (Linux x86_64 only)" ;;
   esac
 }
 
 detect_arch() {
   case $(uname -m) in
     x86_64|amd64)   echo amd64 ;;
-    arm64|aarch64)   echo arm64 ;;
-    *)               fail "unsupported architecture: $(uname -m)" ;;
+    *)              fail "unsupported architecture: $(uname -m) (Linux x86_64 only)" ;;
   esac
 }
 
@@ -97,8 +95,7 @@ pretty_os() {
 
 pretty_arch() {
   case $1 in
-    amd64) printf "x86_64 (Intel)" ;;
-    arm64) printf "ARM64 (Apple Silicon / aarch64)" ;;
+    amd64) printf "x86_64 (Intel/AMD)" ;;
     *)     printf "%s" "$1" ;;
   esac
 }

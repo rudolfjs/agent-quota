@@ -61,22 +61,6 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            archive: tar.gz
-          - goos: linux
-            goarch: arm64
-            archive: tar.gz
-          - goos: darwin
-            goarch: amd64
-            archive: tar.gz
-          - goos: darwin
-            goarch: arm64
-            archive: tar.gz
-          - goos: windows
-            goarch: amd64
-            archive: zip
-          - goos: windows
-            goarch: arm64
-            archive: zip
 
     steps:
       - name: Check out code
@@ -92,7 +76,6 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          ARCHIVE_KIND: ${{ matrix.archive }}
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: |
@@ -103,10 +86,6 @@ jobs:
           name="agent-quota_${version}_${GOOS}_${GOARCH}"
           package_dir="dist/$name"
           binary="agent-quota"
-
-          if [ "$GOOS" = "windows" ]; then
-            binary="${binary}.exe"
-          fi
 
           mkdir -p "$package_dir"
 
@@ -120,28 +99,13 @@ jobs:
           cp LICENSE "$package_dir/"
           cp README.md "$package_dir/"
 
-          case "$ARCHIVE_KIND" in
-            tar.gz)
-              tar -C dist -czf "dist/${name}.tar.gz" "$name"
-              ;;
-            zip)
-              (cd dist && zip -rq "${name}.zip" "$name")
-              ;;
-          esac
+          tar -C dist -czf "dist/${name}.tar.gz" "$name"
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.tar.gz
-          if-no-files-found: ignore
-
-      - name: Upload zip
-        if: matrix.archive == 'zip'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{ matrix.goarch }}-zip
-          path: dist/*.zip
           if-no-files-found: ignore
 
   publish:
