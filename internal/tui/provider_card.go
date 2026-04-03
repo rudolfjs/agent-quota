@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/lipgloss/v2"
@@ -16,10 +17,10 @@ import (
 // RenderProviderCard renders a single provider's QuotaResult as a styled card string.
 // It is a sub-component, so it returns a string, not tea.View.
 func RenderProviderCard(r provider.QuotaResult, width int) string {
-	return renderProviderCardWithPalette(r, width, newPalette(true))
+	return renderProviderCardWithPalette(r, width, newPalette(true), true)
 }
 
-func renderProviderCardWithPalette(r provider.QuotaResult, width int, palette appPalette) string {
+func renderProviderCardWithPalette(r provider.QuotaResult, width int, palette appPalette, showGuide bool) string {
 	theme := themeForProvider(r.Provider, palette)
 	sections := []string{renderProviderHeader(r, theme, palette)}
 
@@ -42,7 +43,7 @@ func renderProviderCardWithPalette(r provider.QuotaResult, width int, palette ap
 				sections = append(sections, subtitleStyle(palette).Render(info.Group))
 			}
 		}
-		sections = append(sections, renderWindow(info.Name, info.Group != "", w, width, theme, palette))
+		sections = append(sections, renderWindow(info.Name, info.Group != "", w, width, theme, palette, showGuide))
 	}
 
 	if r.ExtraUsage != nil && r.ExtraUsage.Enabled {
@@ -145,7 +146,7 @@ func providerStatusDetail(status string) string {
 
 // renderWindow renders a single quota window. name is the human-friendly display
 // name; inGroup=true adds a 2-space indent so the entry sits under a group header.
-func renderWindow(name string, inGroup bool, w provider.Window, width int, theme providerTheme, palette appPalette) string {
+func renderWindow(name string, inGroup bool, w provider.Window, width int, theme providerTheme, palette appPalette, showGuide bool) string {
 	usedPct := percent(w.Utilization)
 	resetStr := formatRelativeTime(w.ResetsAt)
 
@@ -156,11 +157,20 @@ func renderWindow(name string, inGroup bool, w provider.Window, width int, theme
 		indent = "  "
 	}
 
+	guide := -1.0
+	if showGuide {
+		guide = budgetGuide(w.Name, w.ResetsAt)
+	}
+	subtitle := fmt.Sprintf("%d%% used • resets %s", usedPct, resetStr)
+	if guide >= 0 {
+		subtitle = fmt.Sprintf("%d%% used • guide %d%% • resets %s", usedPct, percent(guide), resetStr)
+	}
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		indent+windowStyle(palette).Render(name),
-		indent+renderQuotaBar(theme, w.Utilization, barWidth),
-		indent+subtleStyle(palette).Render(fmt.Sprintf("%d%% used • resets %s", usedPct, resetStr)),
+		indent+renderQuotaBar(theme, w.Utilization, barWidth, guide),
+		indent+subtleStyle(palette).Render(subtitle),
 	)
 }
 
@@ -179,7 +189,7 @@ func renderExtraUsage(extra provider.ExtraUsage, width int, theme providerTheme,
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		heading,
-		renderQuotaBar(theme, extra.Utilization, width),
+		renderQuotaBar(theme, extra.Utilization, width, -1),
 		subtleStyle(palette).Render(fmt.Sprintf("%d%% of spend limit used", percent(extra.Utilization))),
 	)
 }
@@ -198,14 +208,126 @@ func newProgressBar(theme providerTheme) progress.Model {
 	return bar
 }
 
-// renderQuotaBar renders a static progress bar that fills as utilization increases.
-// Quota changes are infrequent, so direct ViewAs rendering is easier to read than
-// a spring animation.
-func renderQuotaBar(theme providerTheme, utilization float64, width int) string {
+// renderQuotaBar renders a static progress bar with an optional budget guide marker.
+// guide < 0 means no guide; guide in [0,1] places a fluorescent blue │ at that position.
+func renderQuotaBar(theme providerTheme, utilization float64, width int, guide float64) string {
 	barWidth := max(width-10, 12)
 	b := newProgressBar(theme)
 	b.SetWidth(barWidth)
-	return b.ViewAs(utilization)
+	bar := b.ViewAs(utilization)
+	if guide < 0 || guide > 1 {
+		return bar
+	}
+	return injectGuideMarker(bar, barWidth, guide)
+}
+
+// injectGuideMarker splices a fluorescent blue │ into the progress bar string at
+// the visible character position corresponding to the guide fraction.
+//
+// With WithColorFunc the bar wraps each filled cell individually:
+//
+//	\x1b[color]█\x1b[m\x1b[color]█\x1b[m…\x1b[track-color]░░░…\x1b[m
+//
+// The empty section is a single multi-char span. We handle both cases by
+// replacing only the target character, closing/re-opening the active ANSI span
+// around the marker.
+func injectGuideMarker(bar string, barWidth int, guide float64) string {
+	guidePos := int(math.Round(guide * float64(barWidth)))
+	guidePos = max(0, min(guidePos, barWidth-1))
+
+	guideStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(guideColorHex)).Bold(true)
+	marker := guideStyle.Render("│")
+
+	b := []byte(bar)
+	visibleIdx := 0
+	byteIdx := 0
+	var activeColor string // most recent color escape (non-reset)
+
+	for byteIdx < len(b) {
+		// Capture ANSI escape sequences.
+		if b[byteIdx] == 0x1b && byteIdx+1 < len(b) && b[byteIdx+1] == '[' {
+			j := byteIdx + 2
+			for j < len(b) && (b[j] < 'A' || b[j] > 'Z') && (b[j] < 'a' || b[j] > 'z') {
+				j++
+			}
+			if j < len(b) {
+				j++ // include terminator
+			}
+			seq := string(b[byteIdx:j])
+			if seq != "\x1b[m" && seq != "\x1b[0m" {
+				activeColor = seq
+			} else {
+				activeColor = ""
+			}
+			byteIdx = j
+			continue
+		}
+
+		if visibleIdx == guidePos {
+			_, size := utf8.DecodeRune(b[byteIdx:])
+
+			// Build: [before char] + reset + marker + re-open color + [after char]
+			var sb strings.Builder
+			sb.Write(b[:byteIdx])
+			sb.WriteString("\x1b[m") // close current color span
+			sb.WriteString(marker)
+			if activeColor != "" {
+				sb.WriteString(activeColor) // re-open the span for remaining chars
+			}
+			sb.Write(b[byteIdx+size:])
+			return sb.String()
+		}
+
+		_, size := utf8.DecodeRune(b[byteIdx:])
+		visibleIdx++
+		byteIdx += size
+	}
+
+	return bar
+}
+
+// windowDuration returns the total duration for a known window name.
+// Returns 0 for unrecognised windows.
+func windowDuration(name string) time.Duration {
+	// Gemini model windows (e.g. "gemini-2.5-pro") use a 24-hour reset.
+	if strings.HasPrefix(name, "gemini-") {
+		return 24 * time.Hour
+	}
+	base := name
+	// Strip known prefixes (e.g. "codex_spark_five_hour" → "five_hour").
+	for _, suffix := range []string{"_five_hour", "_seven_day"} {
+		if strings.HasSuffix(name, suffix) && len(name) > len(suffix) {
+			base = strings.TrimPrefix(suffix, "_")
+			break
+		}
+	}
+	switch base {
+	case "five_hour":
+		return 5 * time.Hour
+	case "seven_day", "seven_day_sonnet", "seven_day_opus", "seven_day_oauth_apps":
+		return 7 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// budgetGuide computes the linear budget guide position for a window.
+// Returns a value in [0,1] representing how far through the window we are,
+// or -1 if the window duration is unknown.
+func budgetGuide(windowName string, resetsAt time.Time) float64 {
+	dur := windowDuration(windowName)
+	if dur == 0 {
+		return -1
+	}
+	remaining := time.Until(resetsAt)
+	if remaining < 0 {
+		return 1.0
+	}
+	elapsed := dur - remaining
+	if elapsed < 0 {
+		return 0.0
+	}
+	return clampPercent(float64(elapsed) / float64(dur))
 }
 
 func quotaBarColorHex(theme providerTheme, utilization float64) string {

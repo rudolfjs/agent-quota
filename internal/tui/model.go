@@ -85,6 +85,7 @@ const (
 	menuItemQuickView
 	menuItemRefreshRate
 	menuItemToggleHeader
+	menuItemToggleGuide
 	menuItemToggleProvider
 	menuItemToggleQuickMetric
 	menuItemResetQuickViewOrder
@@ -469,6 +470,14 @@ func (m Model) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 		m.menuCursor = cursor
 		m.menuMessage = ""
 		return m, m.saveSettingsCmd()
+	case menuItemToggleGuide:
+		cursor := m.menuCursor
+		m.settings.TUI.HideGuide = !m.settings.TUI.HideGuide
+		m.syncViewport()
+		m.openMainMenu()
+		m.menuCursor = cursor
+		m.menuMessage = ""
+		return m, m.saveSettingsCmd()
 	case menuItemExit:
 		return m, tea.Quit
 	default:
@@ -803,8 +812,9 @@ func (m Model) bodyContent() string {
 		name := p.Name()
 		rs, retrying := m.retryStates[name]
 
+		showGuide := !m.settings.TUI.HideGuide
 		if r, ok := m.results[name]; ok {
-			b.WriteString(renderProviderCardWithPalette(r, cardWidth, m.palette))
+			b.WriteString(renderProviderCardWithPalette(r, cardWidth, m.palette, showGuide))
 			if retrying {
 				b.WriteString("\n")
 				b.WriteString(renderRetryFootnote(rs, m.palette, true))
@@ -815,7 +825,7 @@ func (m Model) bodyContent() string {
 
 		if retrying {
 			errResult := provider.QuotaResult{Provider: name, Status: "error"}
-			b.WriteString(renderProviderCardWithPalette(errResult, cardWidth, m.palette))
+			b.WriteString(renderProviderCardWithPalette(errResult, cardWidth, m.palette, showGuide))
 			b.WriteString("\n")
 			b.WriteString(renderRetryFootnote(rs, m.palette, false))
 			b.WriteString("\n\n")
@@ -824,7 +834,7 @@ func (m Model) bodyContent() string {
 
 		if err, ok := m.errors[name]; ok {
 			errResult := provider.QuotaResult{Provider: name, Status: "error"}
-			b.WriteString(renderProviderCardWithPalette(errResult, cardWidth, m.palette))
+			b.WriteString(renderProviderCardWithPalette(errResult, cardWidth, m.palette, showGuide))
 			b.WriteString("\n")
 			b.WriteString(errorStyle(m.palette).Render("  " + compactProviderError(err)))
 			b.WriteString("\n\n")
@@ -1093,11 +1103,23 @@ func (m Model) mainMenuItems() []settingsItem {
 			description: formatRefreshInterval(m.refreshInterval),
 		},
 	}
+	guideTitle := "Hide guide"
+	guideDescription := "Budget guide visible"
+	if m.settings.TUI.HideGuide {
+		guideTitle = "Show guide"
+		guideDescription = "Budget guide hidden"
+	}
+
 	items = append(items,
 		settingsItem{
 			kind:        menuItemToggleHeader,
 			title:       headerTitle,
 			description: headerDescription,
+		},
+		settingsItem{
+			kind:        menuItemToggleGuide,
+			title:       guideTitle,
+			description: guideDescription,
 		},
 		settingsItem{
 			kind:        menuItemExit,

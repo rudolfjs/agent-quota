@@ -319,7 +319,7 @@ func TestRenderProviderCard_openAILightThemeUsesDarkHeadingAndSoftTrack(t *testi
 		FetchedAt: time.Now(),
 	}
 
-	got := renderProviderCardWithPalette(r, 60, newPalette(false))
+	got := renderProviderCardWithPalette(r, 60, newPalette(false), true)
 
 	if !strings.Contains(got, "15;23;42") {
 		t.Fatalf("expected OpenAI light theme to use dark heading color, got:\n%q", got)
@@ -364,5 +364,146 @@ func TestRenderProviderCard_multipleWindows(t *testing.T) {
 	}
 	if !strings.Contains(got, "72% used") {
 		t.Errorf("expected card to contain '72%% used', got:\n%s", got)
+	}
+}
+
+func TestWindowDuration_knownWindows(t *testing.T) {
+	tests := []struct {
+		name string
+		want time.Duration
+	}{
+		{"five_hour", 5 * time.Hour},
+		{"seven_day", 7 * 24 * time.Hour},
+		{"seven_day_sonnet", 7 * 24 * time.Hour},
+		{"seven_day_opus", 7 * 24 * time.Hour},
+		{"codex_spark_five_hour", 5 * time.Hour},
+		{"codex_spark_seven_day", 7 * 24 * time.Hour},
+		{"gemini-2.5-pro", 24 * time.Hour},
+		{"gemini-2.5-flash", 24 * time.Hour},
+		{"gemini-3.1-pro-preview", 24 * time.Hour},
+		{"unknown_window", 0},
+		{"chat", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := windowDuration(tt.name)
+			if got != tt.want {
+				t.Errorf("windowDuration(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBudgetGuide_midwayThroughSevenDay(t *testing.T) {
+	// 3.5 days remaining out of 7 = 50% elapsed
+	resetsAt := time.Now().Add(3*24*time.Hour + 12*time.Hour)
+	got := budgetGuide("seven_day", resetsAt)
+	if got < 0.49 || got > 0.51 {
+		t.Errorf("budgetGuide(seven_day, 3.5d remaining) = %.4f, want ~0.50", got)
+	}
+}
+
+func TestBudgetGuide_earlyInFiveHour(t *testing.T) {
+	// 4 hours remaining out of 5 = 20% elapsed
+	resetsAt := time.Now().Add(4 * time.Hour)
+	got := budgetGuide("five_hour", resetsAt)
+	if got < 0.19 || got > 0.21 {
+		t.Errorf("budgetGuide(five_hour, 4h remaining) = %.4f, want ~0.20", got)
+	}
+}
+
+func TestBudgetGuide_expiredWindow(t *testing.T) {
+	resetsAt := time.Now().Add(-1 * time.Hour)
+	got := budgetGuide("seven_day", resetsAt)
+	if got != 1.0 {
+		t.Errorf("budgetGuide(expired) = %.4f, want 1.0", got)
+	}
+}
+
+func TestBudgetGuide_unknownWindow(t *testing.T) {
+	got := budgetGuide("chat", time.Now().Add(1*time.Hour))
+	if got != -1 {
+		t.Errorf("budgetGuide(unknown) = %.4f, want -1", got)
+	}
+}
+
+func TestRenderProviderCard_showsGuideInSubtitle(t *testing.T) {
+	// 2 hours remaining in a 5-hour window = 60% elapsed → guide 60%
+	r := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "five_hour",
+			Utilization: 0.35,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+	if !strings.Contains(got, "guide 60%") {
+		t.Errorf("expected card to contain 'guide 60%%', got:\n%s", ansi.Strip(got))
+	}
+}
+
+func TestRenderProviderCard_noGuideForUnknownWindow(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "copilot",
+		Status:   "ok",
+		Windows: []provider.Window{{
+			Name:        "chat",
+			Utilization: 0.25,
+			ResetsAt:    time.Now().Add(2 * time.Hour),
+		}},
+		FetchedAt: time.Now(),
+	}
+
+	got := RenderProviderCard(r, 60)
+	if strings.Contains(got, "guide") {
+		t.Errorf("expected no guide for unknown window, got:\n%s", ansi.Strip(got))
+	}
+}
+
+func TestInjectGuideMarker_placesMarkerAtCorrectPosition(t *testing.T) {
+	theme := themeForProvider("claude", newPalette(true))
+	bar := newProgressBar(theme)
+	bar.SetWidth(40)
+	barStr := bar.ViewAs(0.5)
+
+	result := injectGuideMarker(barStr, 40, 0.25)
+	// The result should contain the │ character from the guide marker.
+	if !strings.Contains(result, "│") {
+		t.Errorf("expected guide marker │ in bar, got:\n%q", result)
+	}
+	// Bar width should be preserved (same visible width).
+	origWidth := ansi.StringWidth(barStr)
+	resultWidth := ansi.StringWidth(result)
+	if resultWidth != origWidth {
+		t.Errorf("guide marker changed bar width from %d to %d", origWidth, resultWidth)
+	}
+}
+
+func TestRenderQuotaBar_noGuideWhenNegative(t *testing.T) {
+	theme := themeForProvider("claude", newPalette(true))
+	bar := renderQuotaBar(theme, 0.5, 60, -1)
+	if strings.Contains(bar, "│") {
+		t.Errorf("expected no guide marker when guide=-1, got:\n%q", bar)
+	}
+}
+
+func TestRenderQuotaBar_guideMarkerPresent(t *testing.T) {
+	theme := themeForProvider("claude", newPalette(true))
+	bar := renderQuotaBar(theme, 0.5, 60, 0.3)
+	if !strings.Contains(bar, "│") {
+		t.Errorf("expected guide marker │ when guide=0.3, got:\n%q", bar)
+	}
+}
+
+func TestRenderQuotaBar_guideUsesBlueColor(t *testing.T) {
+	theme := themeForProvider("claude", newPalette(true))
+	bar := renderQuotaBar(theme, 0.5, 60, 0.3)
+	// #00BFFF = RGB(0, 191, 255) → ANSI true color: 38;2;0;191;255
+	if !strings.Contains(bar, "0;191;255") {
+		t.Errorf("expected guide marker to use fluorescent blue (#00BFFF), got:\n%q", bar)
 	}
 }

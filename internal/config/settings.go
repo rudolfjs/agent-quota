@@ -15,6 +15,7 @@ import (
 // TUISettings holds persisted dashboard preferences changed from the TUI.
 type TUISettings struct {
 	HideHeader     bool `json:"hide_header,omitempty"`
+	HideGuide      bool `json:"hide_guide,omitempty"`
 	RefreshMinutes int  `json:"refresh_minutes,omitempty"`
 }
 

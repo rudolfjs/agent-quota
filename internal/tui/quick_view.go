@@ -159,7 +159,7 @@ func (m Model) renderQuickViewMetricByID(id string, width int) (string, bool) {
 		if result.ExtraUsage == nil || !result.ExtraUsage.Enabled {
 			return "", false
 		}
-		lines = append(lines, renderQuotaBar(theme, clampPercent(result.ExtraUsage.Utilization), width-4))
+		lines = append(lines, renderQuotaBar(theme, clampPercent(result.ExtraUsage.Utilization), width-4, -1))
 		lines = append(lines, subtleStyle(m.palette).Render(fmt.Sprintf("$%.2f / $%.2f used", result.ExtraUsage.UsedUSD, result.ExtraUsage.LimitUSD)))
 		if rs, ok := m.retryStates[metric.ProviderName]; ok {
 			lines = append(lines, errorStyle(m.palette).Render(fmt.Sprintf("stale • retry in %ds", rs.secondsLeft)))
@@ -172,8 +172,16 @@ func (m Model) renderQuickViewMetricByID(id string, width int) (string, bool) {
 			continue
 		}
 		utilization := clampPercent(window.Utilization)
-		lines = append(lines, renderQuotaBar(theme, utilization, width-4))
-		lines = append(lines, subtleStyle(m.palette).Render(fmt.Sprintf("%d%% used • resets %s", percent(utilization), formatRelativeTime(window.ResetsAt))))
+		guide := -1.0
+		if !m.settings.TUI.HideGuide {
+			guide = budgetGuide(window.Name, window.ResetsAt)
+		}
+		lines = append(lines, renderQuotaBar(theme, utilization, width-4, guide))
+		subtitle := fmt.Sprintf("%d%% used • resets %s", percent(utilization), formatRelativeTime(window.ResetsAt))
+		if guide >= 0 {
+			subtitle = fmt.Sprintf("%d%% used • guide %d%% • resets %s", percent(utilization), percent(guide), formatRelativeTime(window.ResetsAt))
+		}
+		lines = append(lines, subtleStyle(m.palette).Render(subtitle))
 		if rs, ok := m.retryStates[metric.ProviderName]; ok {
 			lines = append(lines, errorStyle(m.palette).Render(fmt.Sprintf("stale • retry in %ds", rs.secondsLeft)))
 		}

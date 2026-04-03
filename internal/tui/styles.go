@@ -17,6 +17,7 @@ const (
 	successColorHex   = "#22C55E"
 	warningColorHex   = "#F59E0B"
 	dangerColorHex    = "#EF4444"
+	guideColorHex     = "#00BFFF" // fluorescent blue for budget guide markers
 )
 
 type appPalette struct {
