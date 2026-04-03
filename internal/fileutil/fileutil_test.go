@@ -92,6 +92,30 @@ func TestWarnInsecurePermissions_worldReadable(t *testing.T) {
 	}
 }
 
+// TestWarnInsecurePermissions_groupWritable verifies that a warning is emitted
+// when a file grants group or other non-owner bits without world-readability.
+func TestWarnInsecurePermissions_groupWritable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "creds.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o622); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	fileutil.WarnInsecurePermissions(path)
+
+	if !strings.Contains(buf.String(), "insecure permissions") {
+		t.Errorf("expected insecure-permissions warning for 0622 file, got: %s", buf.String())
+	}
+}
+
 // TestWarnInsecurePermissions_restrictive verifies that no warning is emitted
 // for a properly restricted file (mode 0600).
 func TestWarnInsecurePermissions_restrictive(t *testing.T) {
