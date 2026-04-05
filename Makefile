@@ -49,3 +49,4 @@ local-install: build
 		exit 1; \
 	fi
 	install -m 0755 $(BINARY) $$HOME/.local/bin/$(BINARY)
+	ln -sf $$HOME/.local/bin/$(BINARY) $$HOME/.local/bin/aq
