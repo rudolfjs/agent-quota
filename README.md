@@ -57,13 +57,15 @@ go build -o agent-quota ./cmd/agent-quota/
 
 ## Usage
 
+`aq` is installed as a short alias for `agent-quota`.
+
 ```bash
-agent-quota                   # pretty TUI dashboard
-agent-quota --refresh-minutes 5
-agent-quota --json            # one-shot JSON
-agent-quota -p claude         # one-shot JSON for a single provider
-agent-quota -p copilot        # GitHub Copilot CLI quota
-agent-quota status            # one-shot JSON for scripts
+aq                            # pretty TUI dashboard
+aq --refresh-minutes 5
+aq --json                     # one-shot JSON
+aq -p claude                  # one-shot JSON for a single provider
+aq -p copilot                 # GitHub Copilot CLI quota
+aq status                     # one-shot JSON for scripts
 ```
 
 ## Config

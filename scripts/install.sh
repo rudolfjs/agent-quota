@@ -232,9 +232,13 @@ main() {
   install -m 0755 "$binary_path" "$BIN_DIR/$BINARY"
   ok "installed"
 
+  # Symlink aq -> agent-quota
+  ln -sf "$BIN_DIR/$BINARY" "$BIN_DIR/aq"
+  ok "symlinked aq → $BINARY"
+
   # Done
   printf "\n"
-  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}%s --help${RESET} to get started.\n" "$BINARY"
+  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}%s --help${RESET} (or ${BOLD}aq --help${RESET}) to get started.\n" "$BINARY"
   printf "\n"
 
   # Check PATH
