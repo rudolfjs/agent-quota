@@ -18,9 +18,14 @@ go test -race ./...
 - `internal/cli/` — CLI commands (root, status), flag definitions, output mode resolution
 - `internal/provider/` — Provider interface, registry, domain types (QuotaResult, Window, ExtraUsage)
 - `internal/claude/` — Claude OAuth API client, credential reading, token refresh via CLI
+- `internal/config/` — Configuration management, settings, response caching
+- `internal/copilot/` — GitHub Copilot usage provider
+- `internal/errors/` — Domain error types (auth, network, api, config)
+- `internal/fileutil/` — Atomic file writes (0o600 perms), insecure-permission warnings
+- `internal/gemini/` — Google Gemini usage provider
+- `internal/openai/` — OpenAI usage provider
 - `internal/tui/` — Bubbletea v2 TUI model, provider cards, lipgloss styles
 - `internal/output/` — JSON and text formatters for headless mode
-- `internal/errors/` — Domain error types (auth, network, api, config)
 - `internal/version/` — Build-time version injection, claude CLI version detection
 
 ## Tech Stack Constraints
@@ -84,10 +89,50 @@ go test -race ./...
 2. Implement the `provider.Provider` interface (Name, FetchQuota, Available)
 3. Register in `cmd/agent-quota/main.go`: `registry.Register(<name>.New())`
 
+## Makefile Targets
+
+- `make build` — build binary
+- `make test` — `go test -race -count=1 ./...`
+- `make lint` — `go vet` + `golangci-lint`
+- `make fmt` — check gofmt compliance
+- `make changie-check` — validate changie fragments exist
+- `make release-check` — full pre-release gate (fmt + lint + test + changie + build)
+- `make ci` — alias for `release-check`
+- `make hooks-install` — `lefthook install`
+- `make local-install` — install binary to `~/.local/bin/` (Linux x86_64 only)
+
 ## Lefthook Git Hooks
 
 Run `lefthook install` after cloning.
 
-- `pre-commit`: gofmt, go vet, golangci-lint
+- `pre-commit` (parallel): gofmt, go vet, golangci-lint
 - `commit-msg`: conventional commits format required (`feat|fix|docs|...`)
-- `pre-push`: go test -race, go build
+- `pre-push` (parallel): go test -race, go build
+
+## CI Pipeline (`.github/workflows/ci.yml`)
+
+Runs on PR and push-to-main. Three parallel jobs:
+- **go-checks** — gofmt, go vet, golangci-lint, test, build, install script syntax
+- **lefthook** — runs `pre-commit` and `pre-push` hooks in CI
+- **changie** — PRs touching `cmd/`, `internal/`, `go.mod`, `go.sum`, `scripts/install.sh`, or `lefthook.yml` (excluding `_test.go`) require a changie fragment in `.changes/unreleased/`
+
+## Changie Changelog Management
+
+- Config: `.changie.yaml`
+- Fragments go in `.changes/unreleased/` (YAML files)
+- Kinds: Added (minor), Changed (major), Deprecated (minor), Removed (major), Fixed (patch), Security (patch)
+- Release notes: `.changes/<version>.md` — required before tagging
+
+## Release Pipeline (`.github/workflows/release.yml`)
+
+Triggered by `v*` tags on main:
+1. **verify-tag** — tag must be on main, `.changes/<version>.md` must exist, tests + build pass
+2. **build** — cross-compile linux/amd64 with `-ldflags` version injection, package as `.tar.gz`
+3. **publish** — GitHub Release with changie notes, artifacts, checksums, and `scripts/install.sh`
+
+## Jules Dispatch Workflows
+
+Comment-triggered via `@jules-*` mentions (OWNER/MEMBER only):
+- `@jules-issue` on issues — triage assessment, no code changes
+- `@jules-swe` on issues/PRs — implementation with tests and PR
+- `@jules-security` on PRs — security review of PR diff (Sentinel)
