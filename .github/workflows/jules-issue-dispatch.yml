@@ -10,6 +10,8 @@ jobs:
     # Trigger on @jules-issue comments from owners/members on issues only
     if: >
       contains(github.event.comment.body, '@jules-issue') &&
+      !contains(github.event.comment.body, '@jules-swe') &&
+      !contains(github.event.comment.body, '@jules-security') &&
       github.event.issue.pull_request == null &&
       contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
     permissions:

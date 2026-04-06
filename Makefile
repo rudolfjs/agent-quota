@@ -32,14 +32,14 @@ changie-check:
 
 release-check: fmt lint test changie-check
 	sh -n scripts/install.sh
-	sh -n scripts/install-dev-deps.sh
+	sh -n scripts/install-deps.sh
 	go build -o /tmp/$(BINARY) $(CMD)
 
 hooks-install:
 	lefthook install
 
 install-deps:
-	sh scripts/install-dev-deps.sh
+	sh scripts/install-deps.sh
 
 ci: release-check
 
