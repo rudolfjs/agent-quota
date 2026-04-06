@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt changie-check release-check hooks-install ci local-install
+.PHONY: build test lint fmt changie-check release-check hooks-install ci local-install install-deps
 
 BINARY := agent-quota
 CMD := ./cmd/agent-quota/
@@ -32,10 +32,14 @@ changie-check:
 
 release-check: fmt lint test changie-check
 	sh -n scripts/install.sh
+	sh -n scripts/install-dev-deps.sh
 	go build -o /tmp/$(BINARY) $(CMD)
 
 hooks-install:
 	lefthook install
+
+install-deps:
+	sh scripts/install-dev-deps.sh
 
 ci: release-check
 
