@@ -28,3 +28,22 @@ pre-push:
       run: go test -race -count=1 ./...
     build:
       run: go build -o /dev/null ./cmd/agent-quota/
+    changie:
+      run: >
+        sh -c '
+        base=$(git merge-base origin/main HEAD 2>/dev/null) || exit 0;
+        changed=$(git diff --name-only "$base" HEAD);
+        needs=0;
+        for f in $changed; do
+          case "$f" in
+            cmd/*|internal/*|go.mod|go.sum|scripts/install.sh|lefthook.yml)
+              case "$f" in *_test.go) ;; *) needs=1 ;; esac ;;
+          esac;
+        done;
+        [ "$needs" -eq 0 ] && exit 0;
+        if printf "%s\n" "$changed" | grep -qE "^\.changes/unreleased/.*\.ya?ml$"; then
+          exit 0;
+        fi;
+        printf "\n\033[33m⚠  No changie fragment found for product changes.\033[0m\n";
+        printf "   Run: changie new\n\n";
+        exit 0'

@@ -107,7 +107,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "$BASE_REF" --depth=1
+          git fetch origin "$BASE_REF"
           changed_files=$(git diff --name-only "origin/$BASE_REF...HEAD")
           printf 'Changed files:\n%s\n' "$changed_files"
 
