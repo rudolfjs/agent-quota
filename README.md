@@ -107,7 +107,7 @@ TUI settings example:
 ## Development
 
 ```bash
-make hooks-install
+make install-deps     # first time: install tools, hooks, and module deps
 make release-check
 make build
 ```

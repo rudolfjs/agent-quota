@@ -4,24 +4,32 @@ This repository uses automated checks, `changie`-managed release notes, and tag-
 
 ## Prerequisites
 
-- Go 1.25+
-- [`lefthook`](https://github.com/evilmartians/lefthook)
-- [`changie`](https://github.com/miniscruff/changie)
-- [`golangci-lint`](https://github.com/golangci/golangci-lint)
+- Go 1.25+ ([install from go.dev/dl](https://go.dev/dl/))
 
-Install the local tooling:
+## Initial setup
+
+After cloning, run:
+
+```bash
+make install-deps
+```
+
+This will:
+
+1. Verify your Go version meets the minimum (1.25.0)
+2. Install development tools: lefthook, changie, golangci-lint
+3. Warn if `$(go env GOPATH)/bin` is not on your PATH
+4. Download Go module dependencies
+5. Set up Git hooks via lefthook
+
+### Manual tool install (if needed)
+
+If you prefer to install tools individually:
 
 ```bash
 go install github.com/evilmartians/lefthook/v2@latest
 go install github.com/miniscruff/changie@latest
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-```
-
-## Initial setup
-
-Enable the Git hooks after cloning:
-
-```bash
 make hooks-install
 ```
 
