@@ -138,6 +138,34 @@ func TestFetchUsage_rateLimitedCarriesRetryAfter(t *testing.T) {
 	if domErr.RetryAfter != 120*time.Second {
 		t.Fatalf("RetryAfter = %v, want %v", domErr.RetryAfter, 120*time.Second)
 	}
+	if !strings.Contains(domErr.Message, "429") {
+		t.Fatalf("Message = %q, want HTTP status code in user-facing message", domErr.Message)
+	}
+}
+
+func TestFetchUsage_unexpectedStatus_includesCodeInMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal"}`))
+	}))
+	defer srv.Close()
+
+	client := claude.NewAPIClient(srv.URL, http.DefaultClient)
+	_, err := client.FetchUsage(t.Context(), "tok")
+	if err == nil {
+		t.Fatal("expected error for 500 response, got nil")
+	}
+
+	var domErr *apierrors.DomainError
+	if !errors.As(err, &domErr) {
+		t.Fatalf("error type = %T, want DomainError", err)
+	}
+	if domErr.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("StatusCode = %d, want %d", domErr.StatusCode, http.StatusInternalServerError)
+	}
+	if !strings.Contains(domErr.Message, "500") {
+		t.Fatalf("Message = %q, want HTTP status code in user-facing message", domErr.Message)
+	}
 }
 
 func TestFetchUsage_malformedJSON_returnsError(t *testing.T) {

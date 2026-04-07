@@ -949,6 +949,10 @@ func (m Model) triggerManualRefresh() (tea.Model, tea.Cmd) {
 	if m.pending > 0 {
 		return m, nil
 	}
+	// Clear retry states so retrying providers are included in the refresh.
+	// Stale retryTickMsgs are harmlessly ignored because the generation check
+	// in Update fails when the key no longer exists.
+	clear(m.retryStates)
 	refreshable := m.refreshableProviders()
 	if len(refreshable) == 0 {
 		return m, nil
