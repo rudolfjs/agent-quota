@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -224,6 +225,102 @@ func TestClaude_FetchQuota_serverError(t *testing.T) {
 	}
 	if domErr.Kind != "api" {
 		t.Errorf("Kind = %q, want %q", domErr.Kind, "api")
+	}
+}
+
+func TestClaude_FetchQuota_rateLimitBackoff(t *testing.T) {
+	var calls atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"rate_limited"}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	credPath := writeCredFile(t, dir, validCredsPayload(time.Now().Add(time.Hour)))
+	backoffPath := dir + "/backoff.json"
+
+	c := claude.New(
+		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(backoffPath),
+		claude.WithHTTPClient(http.DefaultClient),
+		claude.WithBaseURL(srv.URL),
+	)
+
+	// First call should hit the server and return 429
+	_, err := c.FetchQuota(t.Context())
+	if err == nil {
+		t.Fatal("expected error for 429 response")
+	}
+
+	if calls.Load() != 1 {
+		t.Fatalf("expected 1 API call, got %d", calls.Load())
+	}
+
+	// Second call should fail immediately without hitting the server
+	_, err = c.FetchQuota(t.Context())
+	if err == nil {
+		t.Fatal("expected error for cached backoff")
+	}
+
+	if calls.Load() != 1 {
+		t.Fatalf("expected API calls to remain 1, got %d", calls.Load())
+	}
+
+	var domErr *apierrors.DomainError
+	if !errors.As(err, &domErr) {
+		t.Fatalf("expected *DomainError, got %T", err)
+	}
+	if domErr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("StatusCode = %d, want 429", domErr.StatusCode)
+	}
+	if domErr.RetryAfter == 0 {
+		t.Fatal("expected RetryAfter > 0 in cached backoff error")
+	}
+}
+
+func TestClaude_FetchQuota_rateLimitClear(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(sampleUsageResponse)
+			return
+		}
+		t.Fatal("unexpected second call")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	credPath := writeCredFile(t, dir, validCredsPayload(time.Now().Add(time.Hour)))
+	backoffPath := dir + "/backoff.json"
+
+	// Pre-seed an expired backoff state
+	_ = os.WriteFile(backoffPath, []byte(`{"retry_after_end":"2000-01-01T00:00:00Z"}`), 0600)
+
+	c := claude.New(
+		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(backoffPath),
+		claude.WithHTTPClient(http.DefaultClient),
+		claude.WithBaseURL(srv.URL),
+	)
+
+	_, err := c.FetchQuota(t.Context())
+	if err != nil {
+		t.Fatalf("FetchQuota: %v", err)
+	}
+
+	if calls.Load() != 1 {
+		t.Fatalf("expected 1 API call, got %d", calls.Load())
+	}
+
+	// Verify backoff state was cleared
+	if _, err := os.Stat(backoffPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected backoff file to be removed, err = %v", err)
 	}
 }
 

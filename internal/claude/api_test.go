@@ -143,6 +143,34 @@ func TestFetchUsage_rateLimitedCarriesRetryAfter(t *testing.T) {
 	}
 }
 
+func TestFetchUsage_rateLimitedMissingRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"rate_limited"}`))
+	}))
+	defer srv.Close()
+
+	client := claude.NewAPIClient(srv.URL, http.DefaultClient)
+	_, err := client.FetchUsage(t.Context(), "tok")
+	if err == nil {
+		t.Fatal("expected error for 429 response, got nil")
+	}
+
+	var domErr *apierrors.DomainError
+	if !errors.As(err, &domErr) {
+		t.Fatalf("error type = %T, want DomainError", err)
+	}
+	if domErr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("StatusCode = %d, want %d", domErr.StatusCode, http.StatusTooManyRequests)
+	}
+	if domErr.RetryAfter != 0 {
+		t.Fatalf("RetryAfter = %v, want 0", domErr.RetryAfter)
+	}
+	if !strings.Contains(domErr.Message, "429") {
+		t.Fatalf("Message = %q, want HTTP status code in user-facing message", domErr.Message)
+	}
+}
+
 func TestFetchUsage_unexpectedStatus_includesCodeInMessage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

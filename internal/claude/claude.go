@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,6 +15,7 @@ import (
 // Claude implements provider.Provider for the Anthropic Claude API.
 type Claude struct {
 	credPath       string
+	backoffPath    string
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	baseURL        string
@@ -25,6 +27,11 @@ type Option func(*Claude)
 // WithCredentialsPath sets the path to the credentials JSON file.
 func WithCredentialsPath(path string) Option {
 	return func(c *Claude) { c.credPath = path }
+}
+
+// WithBackoffPath sets the path to the backoff state JSON file.
+func WithBackoffPath(path string) Option {
+	return func(c *Claude) { c.backoffPath = path }
 }
 
 // WithHTTPClient sets a custom HTTP client for API requests.
@@ -51,7 +58,16 @@ func New(opts ...Option) *Claude {
 	if c.credPath == "" {
 		path, err := DefaultCredentialsPath()
 		c.credPath = path
-		c.defaultPathErr = err
+		if c.defaultPathErr == nil {
+			c.defaultPathErr = err
+		}
+	}
+	if c.backoffPath == "" {
+		path, err := defaultBackoffPath()
+		c.backoffPath = path
+		if c.defaultPathErr == nil {
+			c.defaultPathErr = err
+		}
 	}
 	return c
 }
@@ -71,8 +87,21 @@ func (c *Claude) Available() bool {
 // FetchQuota retrieves usage data from the Anthropic OAuth API.
 func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	if c.defaultPathErr != nil {
-		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine Claude credentials path", c.defaultPathErr)
+		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine Claude configuration paths", c.defaultPathErr)
 	}
+
+	backoffEnd := readBackoffState(c.backoffPath)
+	if !backoffEnd.IsZero() && time.Now().Before(backoffEnd) {
+		remaining := time.Until(backoffEnd).Round(time.Second)
+		apiErr := apierrors.NewAPIError(
+			fmt.Sprintf("Claude API rate limit exceeded (HTTP 429), retry after %v", remaining),
+			fmt.Errorf("in backoff period until %v", backoffEnd),
+		)
+		apiErr.StatusCode = http.StatusTooManyRequests
+		apiErr.RetryAfter = remaining
+		return provider.QuotaResult{}, apiErr
+	}
+
 	creds, err := ReadCredentials(c.credPath)
 	if err != nil {
 		return provider.QuotaResult{}, apierrors.NewConfigError("failed to read Claude credentials", err)
@@ -93,27 +122,42 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	apiClient := NewAPIClient(c.baseURL, c.httpClient)
 	usage, err := apiClient.FetchUsage(ctx, creds.AccessToken)
 	if err != nil {
-		// On 401, try one refresh-and-retry cycle.
 		var domErr *apierrors.DomainError
-		if errors.As(err, &domErr) && domErr.Kind == "auth" {
-			slog.Debug("got 401, attempting token refresh and retry")
-			if refreshErr := RefreshToken(ctx, c.credPath); refreshErr != nil {
-				slog.Debug("token refresh failed", "error", refreshErr)
-				return provider.QuotaResult{}, apierrors.NewAuthError("Claude authentication failed after refresh attempt", err)
+		if errors.As(err, &domErr) {
+			if domErr.Kind == "auth" {
+				// On 401, try one refresh-and-retry cycle.
+				slog.Debug("got 401, attempting token refresh and retry")
+				if refreshErr := RefreshToken(ctx, c.credPath); refreshErr != nil {
+					slog.Debug("token refresh failed", "error", refreshErr)
+					return provider.QuotaResult{}, apierrors.NewAuthError("Claude authentication failed after refresh attempt", refreshErr)
+				}
+				creds, readErr := ReadCredentials(c.credPath)
+				if readErr != nil {
+					return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", readErr)
+				}
+				usage, err = apiClient.FetchUsage(ctx, creds.AccessToken)
+				if err != nil {
+					var retryErr *apierrors.DomainError
+					if errors.As(err, &retryErr) && retryErr.StatusCode == http.StatusTooManyRequests && retryErr.RetryAfter > 0 {
+						if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(retryErr.RetryAfter)); saveErr != nil {
+							slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
+						}
+					}
+					return provider.QuotaResult{}, err
+				}
+				// Retry succeeded
+				clearBackoffState(c.backoffPath)
+				return convertUsage(creds, usage), nil
+			} else if domErr.StatusCode == http.StatusTooManyRequests && domErr.RetryAfter > 0 {
+				if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(domErr.RetryAfter)); saveErr != nil {
+					slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
+				}
 			}
-			creds, readErr := ReadCredentials(c.credPath)
-			if readErr != nil {
-				return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", readErr)
-			}
-			usage, err = apiClient.FetchUsage(ctx, creds.AccessToken)
-			if err != nil {
-				return provider.QuotaResult{}, err
-			}
-		} else {
-			return provider.QuotaResult{}, err
 		}
+		return provider.QuotaResult{}, err
 	}
 
+	clearBackoffState(c.backoffPath)
 	return convertUsage(creds, usage), nil
 }
 
