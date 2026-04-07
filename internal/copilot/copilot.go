@@ -166,7 +166,7 @@ func (c *Copilot) fetchUser(ctx context.Context, baseURL, token string) (*userRe
 		return nil, apierrors.NewAPIError("Copilot premium requests require billing setup or a billing selection", fmt.Errorf("HTTP %d", resp.StatusCode))
 	default:
 		slog.Debug("copilot API unexpected status", slog.Int("status_code", resp.StatusCode))
-		apiErr := apierrors.NewAPIError("Copilot API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr := apierrors.NewAPIError(fmt.Sprintf("Copilot API returned an unexpected status (HTTP %d)", resp.StatusCode), fmt.Errorf("HTTP %d", resp.StatusCode))
 		apiErr.StatusCode = resp.StatusCode
 		return nil, apiErr
 	}

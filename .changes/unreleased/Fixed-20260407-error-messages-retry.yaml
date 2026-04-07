@@ -1,0 +1,3 @@
+kind: Fixed
+body: Include HTTP status code in API error messages and allow Ctrl+R to override retry backoff timers
+time: 2026-04-07T12:10:00.000000000+10:00
