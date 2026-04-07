@@ -234,7 +234,7 @@ func (o *OpenAI) fetchUsage(ctx context.Context, accessToken string) (*usageResp
 		return nil, apierrors.NewAuthError("OpenAI authentication expired; attempting refresh", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		apiErr := apierrors.NewAPIError("OpenAI usage API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr := apierrors.NewAPIError(fmt.Sprintf("OpenAI usage API returned an unexpected status (HTTP %d)", resp.StatusCode), fmt.Errorf("HTTP %d", resp.StatusCode))
 		apiErr.StatusCode = resp.StatusCode
 		return nil, apiErr
 	}

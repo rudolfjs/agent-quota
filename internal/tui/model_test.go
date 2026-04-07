@@ -466,6 +466,40 @@ func TestUpdate_ctrlRTriggersManualRefreshWhenIdle(t *testing.T) {
 	}
 }
 
+func TestUpdate_ctrlROverridesRetryBackoff(t *testing.T) {
+	p := &stubProvider{name: "claude", result: provider.QuotaResult{Provider: "claude", Status: "ok", FetchedAt: time.Now()}}
+	m := New([]provider.Provider{p})
+	m.pending = 0
+	m.tick = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+		return func() tea.Msg { return fn(time.Unix(0, 0)) }
+	}
+
+	// Simulate a provider in retry backoff state.
+	m.retryStates["claude"] = retryState{
+		statusCode:  429,
+		secondsLeft: 120,
+		generation:  1,
+		attempt:     2,
+	}
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	model := updated.(Model)
+
+	if _, retrying := model.retryStates["claude"]; retrying {
+		t.Fatal("expected ctrl+r to clear retry state")
+	}
+	if model.pending != 1 {
+		t.Fatalf("pending = %d, want 1", model.pending)
+	}
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to schedule fetch command")
+	}
+	runCmd(cmd)
+	if p.fetchCalls != 1 {
+		t.Fatalf("fetchCalls = %d, want 1 (ctrl+r should trigger immediate fetch)", p.fetchCalls)
+	}
+}
+
 func TestView_singleProviderSpinnerUsesProviderColor(t *testing.T) {
 	m := New([]provider.Provider{&stubProvider{name: "claude"}}, WithDarkBackground(true))
 

@@ -219,7 +219,7 @@ func doJSONRequest[T any](ctx context.Context, client *http.Client, method, targ
 		return nil, apierrors.NewAuthError("Gemini authentication expired; refresh required", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		apiErr := apierrors.NewAPIError("Gemini API returned an unexpected status", fmt.Errorf("HTTP %d", resp.StatusCode))
+		apiErr := apierrors.NewAPIError(fmt.Sprintf("Gemini API returned an unexpected status (HTTP %d)", resp.StatusCode), fmt.Errorf("HTTP %d", resp.StatusCode))
 		apiErr.StatusCode = resp.StatusCode
 		return nil, apiErr
 	}
