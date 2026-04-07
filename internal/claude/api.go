@@ -91,14 +91,23 @@ func (c *APIClient) FetchUsage(ctx context.Context, accessToken string) (*UsageR
 		return nil, apierrors.NewAuthError("Claude token is invalid or expired", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		apiErr := apierrors.NewAPIError(
-			fmt.Sprintf("usage API returned an unexpected status (HTTP %d)", resp.StatusCode),
-			fmt.Errorf("HTTP %d", resp.StatusCode),
-		)
+		msg := fmt.Sprintf("usage API returned an unexpected status (HTTP %d)", resp.StatusCode)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			msg = "Claude API rate limit exceeded (HTTP 429)"
+		}
+
+		apiErr := apierrors.NewAPIError(msg, fmt.Errorf("HTTP %d", resp.StatusCode))
 		apiErr.StatusCode = resp.StatusCode
+
 		if retryAfter, ok := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()); ok {
 			apiErr.RetryAfter = retryAfter
+			if resp.StatusCode == http.StatusTooManyRequests {
+				// Round to nearest second to avoid messy fractions in user-facing output.
+				rounded := retryAfter.Round(time.Second)
+				apiErr.Message = fmt.Sprintf("Claude API rate limit exceeded (HTTP 429), retry after %v", rounded)
+			}
 		}
+
 		return nil, apiErr
 	}
 
