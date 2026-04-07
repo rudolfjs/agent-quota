@@ -45,14 +45,6 @@ Download the latest Linux x86_64 binary directly instead of using the installer:
 mkdir -p ~/.local/bin && curl -fsSL -o ~/.local/bin/agent-quota https://github.com/rudolfjs/agent-quota/releases/latest/download/agent-quota_linux_amd64 && chmod +x ~/.local/bin/agent-quota
 ```
 
-### Install with Go
-
-This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
-
-```bash
-go install github.com/rudolfjs/agent-quota/cmd/agent-quota@latest
-```
-
 ### Build from source
 
 Manual builds may compile on other platforms, but Linux x86_64 is the only supported target for now.
