@@ -845,11 +845,30 @@ func (m Model) bodyContent() string {
 }
 
 func renderRetryFootnote(rs retryState, palette appPalette, showingLastKnownData bool) string {
-	message := fmt.Sprintf("  HTTP %d · Retrying in %s", rs.statusCode, formatRetryCountdown(rs.secondsLeft))
+	return errorStyle(palette).Render("  " + retryStatusMessage(rs, showingLastKnownData))
+}
+
+func retryStatusMessage(rs retryState, showingLastKnownData bool) string {
+	if rs.statusCode == 429 {
+		message := fmt.Sprintf("HTTP 429 · cooldown %s", formatRetryCountdown(rs.secondsLeft))
+		if showingLastKnownData {
+			message += " · stale"
+		}
+		return message + " · ctrl+r retry now"
+	}
+
+	message := fmt.Sprintf("HTTP %d · Retrying in %s", rs.statusCode, formatRetryCountdown(rs.secondsLeft))
 	if showingLastKnownData {
 		message += " · stale"
 	}
-	return errorStyle(palette).Render(message)
+	return message
+}
+
+func retryStatusCompactMessage(rs retryState) string {
+	if rs.statusCode == 429 {
+		return fmt.Sprintf("stale • cooldown %s • ctrl+r retry now", formatRetryCountdown(rs.secondsLeft))
+	}
+	return fmt.Sprintf("stale • retry in %s", formatRetryCountdown(rs.secondsLeft))
 }
 
 func compactProviderError(err error) string {
@@ -956,6 +975,13 @@ func (m Model) triggerManualRefresh() (tea.Model, tea.Cmd) {
 	refreshable := m.refreshableProviders()
 	if len(refreshable) == 0 {
 		return m, nil
+	}
+	for _, p := range refreshable {
+		if resetter, ok := p.(provider.BackoffResetter); ok {
+			if err := resetter.ResetBackoff(); err != nil {
+				slog.Debug("failed to clear provider backoff state", slog.String("provider", p.Name()), "error", err)
+			}
+		}
 	}
 	m.pending += len(refreshable)
 	if m.refreshInterval > 0 {

@@ -20,6 +20,8 @@ type stubProvider struct {
 	result     provider.QuotaResult
 	err        error
 	fetchCalls int
+	resetCalls int
+	resetErr   error
 }
 
 func (s *stubProvider) Name() string { return s.name }
@@ -28,6 +30,10 @@ func (s *stubProvider) FetchQuota(_ context.Context) (provider.QuotaResult, erro
 	return s.result, s.err
 }
 func (s *stubProvider) Available() bool { return true }
+func (s *stubProvider) ResetBackoff() error {
+	s.resetCalls++
+	return s.resetErr
+}
 
 func TestNew_returnsModelWithProviders(t *testing.T) {
 	p := &stubProvider{name: "test"}
@@ -202,8 +208,11 @@ func TestUpdate_fetchErrorMsg_retryableKeepsCachedResultVisible(t *testing.T) {
 	if !strings.Contains(body, "35% used") {
 		t.Fatalf("bodyContent() = %q, want cached quota bars to remain visible", body)
 	}
-	if !strings.Contains(body, "Retrying in 2m") {
-		t.Fatalf("bodyContent() = %q, want retry countdown", body)
+	if !strings.Contains(body, "cooldown 2m") {
+		t.Fatalf("bodyContent() = %q, want cooldown countdown", body)
+	}
+	if !strings.Contains(body, "ctrl+r retry now") {
+		t.Fatalf("bodyContent() = %q, want manual retry hint", body)
 	}
 }
 
@@ -222,8 +231,8 @@ func TestUpdate_fetchErrorMsg_retryableHonorsRetryAfter(t *testing.T) {
 	if rs.secondsLeft != 90 {
 		t.Fatalf("secondsLeft = %d, want 90", rs.secondsLeft)
 	}
-	if !strings.Contains(model.bodyContent(), "Retrying in 1m 30s") {
-		t.Fatalf("bodyContent() = %q, want retry-after countdown", model.bodyContent())
+	if !strings.Contains(model.bodyContent(), "cooldown 1m 30s") {
+		t.Fatalf("bodyContent() = %q, want retry-after cooldown countdown", model.bodyContent())
 	}
 }
 
@@ -495,6 +504,9 @@ func TestUpdate_ctrlROverridesRetryBackoff(t *testing.T) {
 		t.Fatal("expected ctrl+r to schedule fetch command")
 	}
 	runCmd(cmd)
+	if p.resetCalls != 1 {
+		t.Fatalf("resetCalls = %d, want 1 (ctrl+r should clear provider backoff)", p.resetCalls)
+	}
 	if p.fetchCalls != 1 {
 		t.Fatalf("fetchCalls = %d, want 1 (ctrl+r should trigger immediate fetch)", p.fetchCalls)
 	}

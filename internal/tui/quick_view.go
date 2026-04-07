@@ -162,7 +162,7 @@ func (m Model) renderQuickViewMetricByID(id string, width int) (string, bool) {
 		lines = append(lines, renderQuotaBar(theme, clampPercent(result.ExtraUsage.Utilization), width-4, -1))
 		lines = append(lines, subtleStyle(m.palette).Render(fmt.Sprintf("$%.2f / $%.2f used", result.ExtraUsage.UsedUSD, result.ExtraUsage.LimitUSD)))
 		if rs, ok := m.retryStates[metric.ProviderName]; ok {
-			lines = append(lines, errorStyle(m.palette).Render(fmt.Sprintf("stale • retry in %ds", rs.secondsLeft)))
+			lines = append(lines, errorStyle(m.palette).Render(retryStatusCompactMessage(rs)))
 		}
 		return strings.Join(lines, "\n"), true
 	}
@@ -183,7 +183,7 @@ func (m Model) renderQuickViewMetricByID(id string, width int) (string, bool) {
 		}
 		lines = append(lines, subtleStyle(m.palette).Render(subtitle))
 		if rs, ok := m.retryStates[metric.ProviderName]; ok {
-			lines = append(lines, errorStyle(m.palette).Render(fmt.Sprintf("stale • retry in %ds", rs.secondsLeft)))
+			lines = append(lines, errorStyle(m.palette).Render(retryStatusCompactMessage(rs)))
 		}
 		return strings.Join(lines, "\n"), true
 	}

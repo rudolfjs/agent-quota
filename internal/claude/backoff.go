@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,6 +55,10 @@ func saveBackoffState(path string, end time.Time) error {
 }
 
 // clearBackoffState removes the backoff state file if it exists.
-func clearBackoffState(path string) {
-	_ = os.Remove(path)
+func clearBackoffState(path string) error {
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }

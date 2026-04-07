@@ -39,6 +39,7 @@ func main() {
 		jsonFlag       bool
 		prettyFlag     bool
 		quickFlag      bool
+		forceFlag      bool
 		debug          bool
 		refreshMinutes int
 	)
@@ -98,10 +99,13 @@ func main() {
 				if err != nil {
 					return err
 				}
+				if forceFlag {
+					resetProviderBackoffs(providers)
+				}
 				return runTUI(cmd.Context(), providers, refreshInterval, settings, cachedResults, quickFlag)
 			}
 
-			results, err := fetchResults(cmd.Context(), providers)
+			results, err := fetchResults(cmd.Context(), providers, forceFlag)
 			if err != nil {
 				return err
 			}
@@ -123,6 +127,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "force JSON output")
 	rootCmd.Flags().BoolVar(&prettyFlag, "pretty", false, "force TUI output")
 	rootCmd.Flags().BoolVarP(&quickFlag, "quick", "q", false, "start in compact quick-view mode")
+	rootCmd.Flags().BoolVar(&forceFlag, "force", false, "clear local provider backoff before fetching")
 	rootCmd.Flags().IntVar(&refreshMinutes, "refresh-minutes", 0, "override TUI auto-refresh interval in minutes")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "enable debug logging to stderr")
 
@@ -155,7 +160,7 @@ func filterByModel(results []provider.QuotaResult, model string) []provider.Quot
 }
 
 // fetchResults queries the selected provider(s) and collects results.
-func fetchResults(ctx context.Context, providers []provider.Provider) ([]provider.QuotaResult, error) {
+func fetchResults(ctx context.Context, providers []provider.Provider, force bool) ([]provider.QuotaResult, error) {
 	if len(providers) == 0 {
 		return nil, apierrors.NewConfigError("no providers are configured on this machine", fmt.Errorf("no providers selected"))
 	}
@@ -170,20 +175,37 @@ func fetchResults(ctx context.Context, providers []provider.Provider) ([]provide
 			})
 			continue
 		}
+		if force {
+			if resetter, ok := p.(provider.BackoffResetter); ok {
+				if err := resetter.ResetBackoff(); err != nil {
+					slog.Debug("provider backoff reset failed", slog.String("provider", p.Name()), "error", err)
+					results = append(results, provider.ErrorResult(p.Name(), err, time.Now()))
+					continue
+				}
+			}
+		}
 
 		result, err := p.FetchQuota(ctx)
 		if err != nil {
 			slog.Debug("provider fetch failed", slog.String("provider", p.Name()), "error", err)
-			results = append(results, provider.QuotaResult{
-				Provider:  p.Name(),
-				Status:    "error",
-				FetchedAt: time.Now(),
-			})
+			results = append(results, provider.ErrorResult(p.Name(), err, time.Now()))
 			continue
 		}
 		results = append(results, result)
 	}
 	return results, nil
+}
+
+func resetProviderBackoffs(providers []provider.Provider) {
+	for _, p := range providers {
+		resetter, ok := p.(provider.BackoffResetter)
+		if !ok {
+			continue
+		}
+		if err := resetter.ResetBackoff(); err != nil {
+			slog.Debug("provider backoff reset failed", slog.String("provider", p.Name()), "error", err)
+		}
+	}
 }
 
 func resolveTUIRefreshInterval(cfg config.Config, settings config.Settings, overrideMinutes int, overrideSet bool) (time.Duration, error) {

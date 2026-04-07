@@ -43,7 +43,9 @@ func TestBackoffState(t *testing.T) {
 	}
 
 	// Clear backoff state
-	clearBackoffState(path)
+	if err := clearBackoffState(path); err != nil {
+		t.Fatalf("clearBackoffState() error = %v", err)
+	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected backoff file to be removed, err = %v", err)
 	}

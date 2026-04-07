@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'claude: add manual backoff reset for ctrl+r and --force, and surface safe headless error details'
+time: 2026-04-07T12:40:00.000000000Z
