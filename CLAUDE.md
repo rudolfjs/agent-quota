@@ -5,11 +5,20 @@ CLI tool that fetches AI provider usage/quota data. Pretty TUI for humans, headl
 ## Build & Run
 
 ```bash
+# First-time setup
+make install-deps
+
 go build -o agent-quota ./cmd/agent-quota/
 go test -race ./...
 ./agent-quota --help
 ./agent-quota -p claude          # headless JSON output
 ./agent-quota                    # pretty TUI (requires TTY)
+```
+
+Run a single package or test:
+```bash
+go test -race -count=1 ./internal/config
+go test -race -count=1 ./internal/config -run '^TestName$'
 ```
 
 ## Architecture
@@ -27,6 +36,12 @@ go test -race ./...
 - `internal/tui/` — Bubbletea v2 TUI model, provider cards, lipgloss styles
 - `internal/output/` — JSON and text formatters for headless mode
 - `internal/version/` — Build-time version injection, claude CLI version detection
+
+### Key Behaviors
+
+- **Output mode resolution**: `--json` wins, then `--pretty`, then `--provider` forces headless JSON, otherwise TTY detection decides between TUI and JSON
+- **Config files**: `~/.config/agent-quota/` (or XDG config dir) contains `providers.json` (provider selection), `settings.json` (TUI preferences), `quota-cache.json` (last snapshots). The TUI uses injected save callbacks from `main.go` to persist these.
+- **Stale data preservation**: Failed refreshes should preserve the last good cached result instead of blanking the screen
 
 ## Tech Stack Constraints
 
