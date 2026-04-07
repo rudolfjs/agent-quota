@@ -92,7 +92,7 @@ func (c *APIClient) FetchUsage(ctx context.Context, accessToken string) (*UsageR
 	}
 	if resp.StatusCode != http.StatusOK {
 		apiErr := apierrors.NewAPIError(
-			"usage API returned an unexpected status",
+			fmt.Sprintf("usage API returned an unexpected status (HTTP %d)", resp.StatusCode),
 			fmt.Errorf("HTTP %d", resp.StatusCode),
 		)
 		apiErr.StatusCode = resp.StatusCode
