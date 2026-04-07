@@ -2,9 +2,11 @@ package provider_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
+	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
 	"github.com/schnetlerr/agent-quota/internal/provider"
 )
 
@@ -94,5 +96,47 @@ func TestWindow_UtilizationRange(t *testing.T) {
 		if got != tc.wantValid {
 			t.Errorf("Window{Utilization: %f}.IsValid() = %v, want %v", tc.utilization, got, tc.wantValid)
 		}
+	}
+}
+
+func TestErrorResult_usesSafeDomainErrorDetails(t *testing.T) {
+	now := time.Now().UTC()
+	domErr := apierrors.NewAPIError("Claude API rate limit exceeded (HTTP 429), retry after 2m", errors.New("HTTP 429"))
+	domErr.StatusCode = 429
+	domErr.RetryAfter = 2 * time.Minute
+
+	got := provider.ErrorResult("claude", domErr, now)
+
+	if got.Status != "error" {
+		t.Fatalf("Status = %q, want %q", got.Status, "error")
+	}
+	if got.Error == nil {
+		t.Fatal("Error should be populated for error results")
+	}
+	if got.Error.Kind != "api" {
+		t.Fatalf("Error.Kind = %q, want %q", got.Error.Kind, "api")
+	}
+	if got.Error.Message != domErr.Message {
+		t.Fatalf("Error.Message = %q, want %q", got.Error.Message, domErr.Message)
+	}
+	if got.Error.StatusCode != 429 {
+		t.Fatalf("Error.StatusCode = %d, want 429", got.Error.StatusCode)
+	}
+	if got.Error.RetryAfterSeconds != 120 {
+		t.Fatalf("Error.RetryAfterSeconds = %d, want 120", got.Error.RetryAfterSeconds)
+	}
+}
+
+func TestErrorResult_sanitizesUnexpectedErrors(t *testing.T) {
+	got := provider.ErrorResult("claude", errors.New("raw internal failure"), time.Now().UTC())
+
+	if got.Error == nil {
+		t.Fatal("Error should be populated for unexpected failures")
+	}
+	if got.Error.Message != "unexpected error" {
+		t.Fatalf("Error.Message = %q, want %q", got.Error.Message, "unexpected error")
+	}
+	if got.Error.Kind != "" {
+		t.Fatalf("Error.Kind = %q, want empty string", got.Error.Kind)
 	}
 }

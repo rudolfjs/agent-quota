@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -124,5 +125,86 @@ func TestNewRegistry_doesNotRegisterJules(t *testing.T) {
 		if _, ok := reg.Get(name); !ok {
 			t.Fatalf("registry missing provider %q", name)
 		}
+	}
+}
+
+type fetchProvider struct {
+	name       string
+	available  bool
+	result     provider.QuotaResult
+	err        error
+	called     bool
+	resetCalls int
+	resetErr   error
+}
+
+func (p *fetchProvider) Name() string    { return p.name }
+func (p *fetchProvider) Available() bool { return p.available }
+func (p *fetchProvider) FetchQuota(_ context.Context) (provider.QuotaResult, error) {
+	p.called = true
+	if p.err != nil {
+		return provider.QuotaResult{}, p.err
+	}
+	return p.result, nil
+}
+func (p *fetchProvider) ResetBackoff() error {
+	p.resetCalls++
+	return p.resetErr
+}
+
+func TestFetchResults_forceResetsProviderBackoffBeforeFetching(t *testing.T) {
+	providers := []provider.Provider{
+		&fetchProvider{
+			name:      "claude",
+			available: true,
+			result:    provider.QuotaResult{Provider: "claude", Status: "ok"},
+		},
+	}
+
+	results, err := fetchResults(t.Context(), providers, true)
+	if err != nil {
+		t.Fatalf("fetchResults() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+
+	p := providers[0].(*fetchProvider)
+	if p.resetCalls != 1 {
+		t.Fatalf("resetCalls = %d, want 1", p.resetCalls)
+	}
+	if !p.called {
+		t.Fatal("expected FetchQuota() to be called after reset")
+	}
+}
+
+func TestFetchResults_forceReturnsResetErrors(t *testing.T) {
+	providers := []provider.Provider{
+		&fetchProvider{
+			name:      "claude",
+			available: true,
+			resetErr:  apierrors.NewConfigError("failed to clear Claude rate-limit backoff state", errors.New("permission denied")),
+		},
+	}
+
+	results, err := fetchResults(t.Context(), providers, true)
+	if err != nil {
+		t.Fatalf("fetchResults() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if results[0].Status != "error" {
+		t.Fatalf("results[0].Status = %q, want %q", results[0].Status, "error")
+	}
+	if results[0].Error == nil {
+		t.Fatal("results[0].Error should be populated")
+	}
+	if results[0].Error.Message != "failed to clear Claude rate-limit backoff state" {
+		t.Fatalf("results[0].Error.Message = %q, want safe reset error", results[0].Error.Message)
+	}
+	p := providers[0].(*fetchProvider)
+	if p.called {
+		t.Fatal("FetchQuota() should not be called when reset fails")
 	}
 }

@@ -109,3 +109,30 @@ func TestWriteText_MultipleResults(t *testing.T) {
 		t.Errorf("output missing openai header\ngot:\n%s", got)
 	}
 }
+
+func TestWriteText_ErrorResultIncludesSafeMessage(t *testing.T) {
+	now := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
+	results := []provider.QuotaResult{{
+		Provider:  "claude",
+		Status:    "error",
+		FetchedAt: now,
+		Error: &provider.ErrorDetails{
+			Message:           "Claude API rate limit exceeded (HTTP 429), retry after 2m",
+			StatusCode:        429,
+			RetryAfterSeconds: 120,
+		},
+	}}
+
+	var buf bytes.Buffer
+	if err := output.WriteText(&buf, results, now); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "claude error") {
+		t.Fatalf("output missing error header\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "Claude API rate limit exceeded (HTTP 429), retry after 2m") {
+		t.Fatalf("output missing safe error message\ngot:\n%s", got)
+	}
+}

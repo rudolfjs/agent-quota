@@ -27,6 +27,14 @@ func WriteText(w io.Writer, results []provider.QuotaResult, now time.Time) error
 		if _, err := fmt.Fprintln(w, header); err != nil {
 			return err
 		}
+		if r.Error != nil && r.Error.Message != "" {
+			if _, err := fmt.Fprintf(w, "  %s\n", r.Error.Message); err != nil {
+				return err
+			}
+		}
+		if r.Status != "ok" {
+			continue
+		}
 
 		for _, win := range r.Windows {
 			pct := int(math.Round(win.Utilization * 100))

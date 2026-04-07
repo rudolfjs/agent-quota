@@ -15,7 +15,8 @@ import (
 // NewStatusCommand returns the "status" subcommand which prints a JSON
 // summary of all available providers — suitable for scripts and agents.
 func NewStatusCommand(reg *provider.Registry) *cobra.Command {
-	return &cobra.Command{
+	var force bool
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Print JSON quota status for all configured providers",
 		Long:  "Fetches quota data from all configured providers and prints JSON to stdout.\nIdeal for scripting: agent-quota status | jq '.[] | select(.provider==\"claude\")'",
@@ -31,15 +32,17 @@ func NewStatusCommand(reg *provider.Registry) *cobra.Command {
 			if len(providers) == 0 {
 				return nil // nothing to report; exit 0
 			}
-			results := fetchAll(cmd.Context(), providers)
+			results := fetchAll(cmd.Context(), providers, force)
 			return output.WriteJSON(cmd.OutOrStdout(), results)
 		},
 	}
+	cmd.Flags().BoolVar(&force, "force", false, "clear local provider backoff before fetching")
+	return cmd
 }
 
 // fetchAll fetches quota from all providers concurrently and returns results
 // in the same order as the input slice. Errors are captured as error-status results.
-func fetchAll(ctx context.Context, providers []provider.Provider) []provider.QuotaResult {
+func fetchAll(ctx context.Context, providers []provider.Provider, force bool) []provider.QuotaResult {
 	type indexed struct {
 		i   int
 		res provider.QuotaResult
@@ -56,15 +59,20 @@ func fetchAll(ctx context.Context, providers []provider.Provider) []provider.Quo
 				}}
 				return
 			}
+			if force {
+				if resetter, ok := p.(provider.BackoffResetter); ok {
+					if err := resetter.ResetBackoff(); err != nil {
+						slog.Debug("provider backoff reset failed", slog.String("provider", p.Name()), "error", err)
+						ch <- indexed{i, provider.ErrorResult(p.Name(), err, time.Now())}
+						return
+					}
+				}
+			}
 
 			res, err := p.FetchQuota(ctx)
 			if err != nil {
-				slog.Debug("provider fetch failed", "provider", p.Name(), "error", err)
-				res = provider.QuotaResult{
-					Provider:  p.Name(),
-					Status:    "error",
-					FetchedAt: time.Now(),
-				}
+				slog.Debug("provider fetch failed", slog.String("provider", p.Name()), "error", err)
+				res = provider.ErrorResult(p.Name(), err, time.Now())
 			}
 			ch <- indexed{i, res}
 		}(i, p)

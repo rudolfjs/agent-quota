@@ -84,6 +84,17 @@ func (c *Claude) Available() bool {
 	return err == nil
 }
 
+// ResetBackoff clears Claude's persisted local rate-limit cooldown.
+func (c *Claude) ResetBackoff() error {
+	if c.defaultPathErr != nil {
+		return apierrors.NewConfigError("cannot determine Claude configuration paths", c.defaultPathErr)
+	}
+	if err := clearBackoffState(c.backoffPath); err != nil {
+		return apierrors.NewConfigError("failed to clear Claude rate-limit backoff state", err)
+	}
+	return nil
+}
+
 // FetchQuota retrieves usage data from the Anthropic OAuth API.
 func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	if c.defaultPathErr != nil {
@@ -146,7 +157,9 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 					return provider.QuotaResult{}, err
 				}
 				// Retry succeeded
-				clearBackoffState(c.backoffPath)
+				if clearErr := clearBackoffState(c.backoffPath); clearErr != nil {
+					slog.Debug("failed to clear rate-limit backoff state", "error", clearErr)
+				}
 				return convertUsage(creds, usage), nil
 			} else if domErr.StatusCode == http.StatusTooManyRequests && domErr.RetryAfter > 0 {
 				if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(domErr.RetryAfter)); saveErr != nil {
@@ -157,7 +170,9 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 		return provider.QuotaResult{}, err
 	}
 
-	clearBackoffState(c.backoffPath)
+	if clearErr := clearBackoffState(c.backoffPath); clearErr != nil {
+		slog.Debug("failed to clear rate-limit backoff state", "error", clearErr)
+	}
 	return convertUsage(creds, usage), nil
 }
 
@@ -207,3 +222,4 @@ func parseWindow(name string, wd WindowData) provider.Window {
 
 // Compile-time interface check.
 var _ provider.Provider = (*Claude)(nil)
+var _ provider.BackoffResetter = (*Claude)(nil)

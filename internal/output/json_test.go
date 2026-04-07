@@ -121,3 +121,42 @@ func TestWriteJSON_MultipleResults_Array(t *testing.T) {
 		t.Errorf("arr[1].provider = %v, want %q", arr[1]["provider"], "openai")
 	}
 }
+
+func TestWriteJSON_ErrorResultIncludesSafeErrorDetails(t *testing.T) {
+	now := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
+	results := []provider.QuotaResult{{
+		Provider:  "claude",
+		Status:    "error",
+		FetchedAt: now,
+		Error: &provider.ErrorDetails{
+			Kind:              "api",
+			Message:           "Claude API rate limit exceeded (HTTP 429), retry after 2m",
+			StatusCode:        429,
+			RetryAfterSeconds: 120,
+		},
+	}}
+
+	var buf bytes.Buffer
+	if err := output.WriteJSON(&buf, results); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	errObj, ok := m["error"].(map[string]any)
+	if !ok {
+		t.Fatal("error should be present as an object")
+	}
+	if errObj["message"] != "Claude API rate limit exceeded (HTTP 429), retry after 2m" {
+		t.Fatalf("error.message = %v, want safe rate-limit message", errObj["message"])
+	}
+	if errObj["status_code"] != 429.0 {
+		t.Fatalf("error.status_code = %v, want 429", errObj["status_code"])
+	}
+	if errObj["retry_after_seconds"] != 120.0 {
+		t.Fatalf("error.retry_after_seconds = %v, want 120", errObj["retry_after_seconds"])
+	}
+}

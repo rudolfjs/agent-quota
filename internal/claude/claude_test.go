@@ -324,6 +324,29 @@ func TestClaude_FetchQuota_rateLimitClear(t *testing.T) {
 	}
 }
 
+func TestClaude_ResetBackoff_clearsPersistedCooldown(t *testing.T) {
+	dir := t.TempDir()
+	credPath := writeCredFile(t, dir, validCredsPayload(time.Now().Add(time.Hour)))
+	backoffPath := dir + "/backoff.json"
+
+	if err := os.WriteFile(backoffPath, []byte(`{"retry_after_end":"2099-01-01T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(backoff): %v", err)
+	}
+
+	c := claude.New(
+		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(backoffPath),
+	)
+
+	if err := c.ResetBackoff(); err != nil {
+		t.Fatalf("ResetBackoff() error = %v", err)
+	}
+
+	if _, err := os.Stat(backoffPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected backoff file to be removed, err = %v", err)
+	}
+}
+
 // validCredsPayload returns a credential file payload with the given expiry.
 func validCredsPayload(expiry time.Time) map[string]any {
 	return map[string]any{
