@@ -18,31 +18,31 @@ The standard release path is:
 Install the latest Linux x86_64 release to `~/.local/bin`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
 ```
 
 Install the latest Linux x86_64 release to `/usr/local/bin` instead:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
 ```
 
 Install a specific Linux x86_64 release version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
+curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
 ```
 
 Skip the confirmation prompt (for CI / scripts):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/schnetlerr/agent-quota/main/scripts/install.sh | YES=1 sh
+curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | YES=1 sh
 ```
 
 Download the latest Linux x86_64 binary directly instead of using the installer:
 
 ```bash
-mkdir -p ~/.local/bin && curl -fsSL -o ~/.local/bin/agent-quota https://github.com/schnetlerr/agent-quota/releases/latest/download/agent-quota_linux_amd64 && chmod +x ~/.local/bin/agent-quota
+mkdir -p ~/.local/bin && curl -fsSL -o ~/.local/bin/agent-quota https://github.com/rudolfjs/agent-quota/releases/latest/download/agent-quota_linux_amd64 && chmod +x ~/.local/bin/agent-quota
 ```
 
 ### Install with Go
@@ -50,7 +50,7 @@ mkdir -p ~/.local/bin && curl -fsSL -o ~/.local/bin/agent-quota https://github.c
 This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
 
 ```bash
-go install github.com/schnetlerr/agent-quota/cmd/agent-quota@latest
+go install github.com/rudolfjs/agent-quota/cmd/agent-quota@latest
 ```
 
 ### Build from source
