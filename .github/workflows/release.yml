@@ -55,8 +55,6 @@ jobs:
   build:
     name: Build release artifacts
     runs-on: ubuntu-latest
-    needs:
-      - verify-tag
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +84,6 @@ jobs:
           version="${TAG#v}"
           short_commit=$(printf '%s' "$COMMIT" | cut -c1-7)
           name="agent-quota_${version}_${GOOS}_${GOARCH}"
-          raw_binary="agent-quota_${GOOS}_${GOARCH}"
           package_dir="dist/$name"
           binary="agent-quota"
 
@@ -99,19 +96,16 @@ jobs:
             -o "$package_dir/$binary" \
             ./cmd/agent-quota/
 
-          install -m 0755 "$package_dir/$binary" "dist/$raw_binary"
           cp LICENSE "$package_dir/"
           cp README.md "$package_dir/"
 
           tar -C dist -czf "dist/${name}.tar.gz" "$name"
 
-      - name: Upload release files
+      - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/*.tar.gz
-            dist/agent-quota_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/*.tar.gz
           if-no-files-found: ignore
 
   publish:

@@ -319,7 +319,7 @@ func TestClaude_FetchQuota_rateLimitClear(t *testing.T) {
 	}
 
 	// Verify backoff state was cleared
-	if _, err := os.Stat(backoffPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(backoffPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected backoff file to be removed, err = %v", err)
 	}
 }

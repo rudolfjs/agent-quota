@@ -139,7 +139,9 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 				if err != nil {
 					var retryErr *apierrors.DomainError
 					if errors.As(err, &retryErr) && retryErr.StatusCode == http.StatusTooManyRequests && retryErr.RetryAfter > 0 {
-						_ = saveBackoffState(c.backoffPath, time.Now().Add(retryErr.RetryAfter))
+						if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(retryErr.RetryAfter)); saveErr != nil {
+							slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
+						}
 					}
 					return provider.QuotaResult{}, err
 				}
@@ -147,7 +149,9 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 				clearBackoffState(c.backoffPath)
 				return convertUsage(creds, usage), nil
 			} else if domErr.StatusCode == http.StatusTooManyRequests && domErr.RetryAfter > 0 {
-				_ = saveBackoffState(c.backoffPath, time.Now().Add(domErr.RetryAfter))
+				if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(domErr.RetryAfter)); saveErr != nil {
+					slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
+				}
 			}
 		}
 		return provider.QuotaResult{}, err

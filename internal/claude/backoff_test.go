@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,7 @@ func TestBackoffState(t *testing.T) {
 	}
 
 	// Save backoff state
-	now := time.Now().Truncate(time.Second) // JSON marshaling truncates to ms, but we truncate to second to avoid minor mismatches
+	now := time.Now()
 	expectedEnd := now.Add(5 * time.Minute)
 	if err := saveBackoffState(path, expectedEnd); err != nil {
 		t.Fatalf("failed to save backoff state: %v", err)
@@ -35,13 +36,15 @@ func TestBackoffState(t *testing.T) {
 
 	// Read saved state
 	readEnd := readBackoffState(path)
-	if !readEnd.Equal(expectedEnd) {
-		t.Fatalf("read backoff end %v, want %v", readEnd, expectedEnd)
+	// Compare Unix milliseconds instead of using time.Equal because
+	// json marshal/unmarshal truncates to nanoseconds or milliseconds.
+	if readEnd.UnixMilli() != expectedEnd.UnixMilli() {
+		t.Fatalf("read backoff end ms %v, want %v", readEnd.UnixMilli(), expectedEnd.UnixMilli())
 	}
 
 	// Clear backoff state
 	clearBackoffState(path)
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected backoff file to be removed, err = %v", err)
 	}
 
