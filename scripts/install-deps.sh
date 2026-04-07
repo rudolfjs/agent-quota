@@ -52,6 +52,19 @@ check_go() {
   ok "Go ${go_ver} (>= ${MIN_GO_VERSION})"
 }
 
+check_gh() {
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "gh (GitHub CLI) is not installed"
+    info "install it from: https://cli.github.com/"
+    info "  macOS:  brew install gh"
+    info "  Linux:  see https://github.com/cli/cli/blob/trunk/docs/install_linux.md"
+    return 1
+  fi
+
+  gh_ver=$(gh --version | head -n 1 | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p')
+  ok "gh ${gh_ver:-unknown}"
+}
+
 install_tools() {
   info "installing lefthook..."
   go install github.com/evilmartians/lefthook/v2@latest
@@ -99,8 +112,9 @@ main() {
   printf "  ${BOLD}agent-quota dev environment setup${RESET}\n"
   printf "\n"
 
-  info "checking Go installation..."
+  info "checking prerequisites..."
   check_go
+  check_gh || true
 
   printf "\n"
   info "installing Go development tools..."

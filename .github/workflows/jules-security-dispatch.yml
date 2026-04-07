@@ -7,10 +7,12 @@ on:
 jobs:
   security-review:
     runs-on: ubuntu-latest
-    # Trigger on @jules-security comments from org members/owners/collaborators on PRs only
+    # Trigger on @jules-security comments from owners/members on PRs only
     if: >
       contains(github.event.comment.body, '@jules-security') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      !contains(github.event.comment.body, '@jules-swe') &&
+      !contains(github.event.comment.body, '@jules-issue') &&
+      contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association) &&
       github.event.issue.pull_request != null
     permissions:
       contents: read
