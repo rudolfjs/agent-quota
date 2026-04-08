@@ -69,7 +69,11 @@ func fetchAll(ctx context.Context, providers []provider.Provider, force bool) []
 				}
 			}
 
-			res, err := p.FetchQuota(ctx)
+			fetchCtx := ctx
+			if force {
+				fetchCtx = context.WithValue(ctx, provider.ForceRetryKey{}, true)
+			}
+			res, err := p.FetchQuota(fetchCtx)
 			if err != nil {
 				slog.Debug("provider fetch failed", slog.String("provider", p.Name()), "error", err)
 				res = provider.ErrorResult(p.Name(), err, time.Now())

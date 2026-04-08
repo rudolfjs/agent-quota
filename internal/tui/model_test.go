@@ -35,6 +35,26 @@ func (s *stubProvider) ResetBackoff() error {
 	return s.resetErr
 }
 
+// contextCapturingStub extends stubProvider to capture the context passed to
+// FetchQuota, allowing tests to inspect whether a forced-retry signal was
+// propagated.
+type contextCapturingStub struct {
+	stubProvider
+	captureCtx func(context.Context)
+}
+
+func (c *contextCapturingStub) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
+	if c.captureCtx != nil {
+		c.captureCtx(ctx)
+	}
+	c.fetchCalls++
+	return c.result, c.err
+}
+
+func (c *contextCapturingStub) Name() string        { return c.name }
+func (c *contextCapturingStub) Available() bool     { return true }
+func (c *contextCapturingStub) ResetBackoff() error { return c.stubProvider.ResetBackoff() }
+
 func TestNew_returnsModelWithProviders(t *testing.T) {
 	p := &stubProvider{name: "test"}
 	m := New([]provider.Provider{p})
@@ -609,6 +629,95 @@ func TestUpdate_tabTogglesQuickViewAndRendersSelectedMetrics(t *testing.T) {
 	}
 	if !strings.Contains(m.footerText(), "full view") {
 		t.Fatalf("footerText() = %q, want quick view toggle hint", m.footerText())
+	}
+}
+
+// TestTUI_ctrlR_doesNotRePersistBackoff verifies that after a ctrl+r manual
+// refresh, if the provider returns a 429 error, the backoff is NOT re-persisted
+// to disk. This tests the integration between the TUI manual refresh flow and
+// the backoff persistence layer.
+//
+// The bug: triggerManualRefresh() calls ResetBackoff() then fetchProvidersCmd().
+// But FetchQuota() inside claude.go re-saves backoff on 429. The user's
+// explicit "I want to retry now" is completely defeated because the backoff
+// file reappears immediately.
+//
+// The fix should ensure that FetchQuota knows it was called in "forced" mode
+// (e.g. via a context key) and skips saving backoff.
+func TestTUI_ctrlR_doesNotRePersistBackoff(t *testing.T) {
+	rateLimitErr := apierrors.NewAPIError("rate limited", context.DeadlineExceeded)
+	rateLimitErr.StatusCode = 429
+	rateLimitErr.RetryAfter = 2 * time.Minute
+
+	// contextAwareStub captures the context passed to FetchQuota so we can
+	// inspect whether the TUI propagated a "forced" signal.
+	var capturedCtx context.Context
+	p := &contextCapturingStub{
+		stubProvider: stubProvider{
+			name: "claude",
+			err:  rateLimitErr,
+		},
+		captureCtx: func(ctx context.Context) { capturedCtx = ctx },
+	}
+
+	m := New([]provider.Provider{p})
+	m.pending = 0
+	m.tick = func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+		return func() tea.Msg { return fn(time.Unix(0, 0)) }
+	}
+
+	// Simulate a pre-existing retry/backoff state (a previous 429).
+	m.retryStates["claude"] = retryState{
+		statusCode:  429,
+		secondsLeft: 600,
+		generation:  1,
+		attempt:     1,
+	}
+
+	// User presses ctrl+r to force a manual refresh.
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	model := updated.(Model)
+
+	// ctrl+r should have cleared the retry state and called ResetBackoff.
+	if _, retrying := model.retryStates["claude"]; retrying {
+		t.Fatal("expected ctrl+r to clear retry state")
+	}
+	if p.resetCalls != 1 {
+		t.Fatalf("resetCalls = %d, want 1 (ctrl+r should clear provider backoff)", p.resetCalls)
+	}
+
+	// Execute the fetch command — it will call FetchQuota which returns 429.
+	msgs := runCmd(cmd)
+	if p.fetchCalls != 1 {
+		t.Fatalf("fetchCalls = %d, want 1", p.fetchCalls)
+	}
+
+	// The critical assertion: the context passed to FetchQuota after a ctrl+r
+	// should carry a "forced retry" signal so the real Claude provider knows
+	// NOT to re-persist the backoff file on 429.
+	//
+	// Currently fetchCmd always uses a plain context.Background() with no
+	// force signal, so this test FAILS — exposing the bug.
+	if capturedCtx == nil {
+		t.Fatal("expected FetchQuota to be called with a context")
+	}
+	if capturedCtx.Value(provider.ForceRetryKey{}) == nil {
+		t.Fatal("BUG: after ctrl+r, the context passed to FetchQuota should contain " +
+			"provider.ForceRetryKey so the provider skips re-persisting backoff on 429; " +
+			"currently triggerManualRefresh uses a plain context with no forced signal")
+	}
+
+	// Also verify the fetch error message was produced.
+	foundErr := false
+	for _, msg := range msgs {
+		if fe, ok := msg.(fetchErrorMsg); ok {
+			if fe.providerName == "claude" {
+				foundErr = true
+			}
+		}
+	}
+	if !foundErr {
+		t.Fatal("expected fetchErrorMsg for claude in batch results after 429")
 	}
 }
 

@@ -71,6 +71,7 @@ func TestFetchQuota_resultExcludesCredentials(t *testing.T) {
 
 	c := claude.New(
 		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(dir+"/backoff.json"),
 		claude.WithHTTPClient(&http.Client{}),
 		claude.WithBaseURL(srv.URL),
 	)

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'claude: prevent --force and ctrl+r from being defeated by re-persisted backoff, cap Retry-After at 5 minutes'
+time: 2026-04-08T11:10:00.000000000Z

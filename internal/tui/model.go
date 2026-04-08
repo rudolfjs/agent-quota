@@ -933,12 +933,16 @@ func (m Model) fetchAllCmd() tea.Cmd {
 }
 
 func fetchProvidersCmd(providers []provider.Provider) tea.Cmd {
+	return fetchProvidersCmdForced(providers, false)
+}
+
+func fetchProvidersCmdForced(providers []provider.Provider, forced bool) tea.Cmd {
 	if len(providers) == 0 {
 		return nil
 	}
 	cmds := make([]tea.Cmd, 0, len(providers))
 	for _, p := range providers {
-		cmds = append(cmds, fetchCmd(p))
+		cmds = append(cmds, fetchCmdForced(p, forced))
 	}
 	return tea.Batch(cmds...)
 }
@@ -987,12 +991,16 @@ func (m Model) triggerManualRefresh() (tea.Model, tea.Cmd) {
 	if m.refreshInterval > 0 {
 		m.refreshGeneration++
 		m.nextRefreshAt = time.Now().Add(m.refreshInterval)
-		return m, tea.Batch(fetchProvidersCmd(refreshable), m.refreshTimerCmd())
+		return m, tea.Batch(fetchProvidersCmdForced(refreshable, true), m.refreshTimerCmd())
 	}
-	return m, fetchProvidersCmd(refreshable)
+	return m, fetchProvidersCmdForced(refreshable, true)
 }
 
 func fetchCmd(p provider.Provider) tea.Cmd {
+	return fetchCmdForced(p, false)
+}
+
+func fetchCmdForced(p provider.Provider, forced bool) tea.Cmd {
 	return func() tea.Msg {
 		if !p.Available() {
 			return fetchResultMsg{providerName: p.Name(), result: provider.QuotaResult{
@@ -1003,6 +1011,9 @@ func fetchCmd(p provider.Provider) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if forced {
+			ctx = context.WithValue(ctx, provider.ForceRetryKey{}, true)
+		}
 		result, err := p.FetchQuota(ctx)
 		if err != nil {
 			return fetchErrorMsg{providerName: p.Name(), err: err}

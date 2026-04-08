@@ -41,8 +41,18 @@ func readBackoffState(path string) time.Time {
 	return state.RetryAfterEnd
 }
 
+// maxBackoffDuration is the maximum duration a backoff deadline may be set into
+// the future. Server-provided Retry-After values exceeding this are capped to
+// prevent unreasonably long lockouts.
+const maxBackoffDuration = 5 * time.Minute
+
 // saveBackoffState saves the given retry-after deadline to the specified path.
+// The deadline is capped at maxBackoffDuration from now to prevent unreasonable lockouts.
 func saveBackoffState(path string, end time.Time) error {
+	maxEnd := time.Now().Add(maxBackoffDuration)
+	if end.After(maxEnd) {
+		end = maxEnd
+	}
 	state := backoffState{RetryAfterEnd: end}
 	data, err := json.Marshal(state)
 	if err != nil {

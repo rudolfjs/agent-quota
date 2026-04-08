@@ -74,3 +74,34 @@ func TestSaveBackoffState_CreatesDirectory(t *testing.T) {
 		t.Fatalf("read backoff end ms %v, want %v", readEnd.UnixMilli(), expectedEnd.UnixMilli())
 	}
 }
+
+// TestBackoffState_maxCap verifies that saveBackoffState (or whatever capping
+// mechanism exists) enforces a maximum duration on the persisted deadline.
+// If the API sends Retry-After: 86400, the saved backoff should be capped
+// at a sane maximum (e.g. 5 minutes) — not 24 hours.
+func TestBackoffState_maxCap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backoff.json")
+
+	// Save a backoff deadline 24 hours in the future — way too long.
+	absurdEnd := time.Now().Add(24 * time.Hour)
+	if err := saveBackoffState(path, absurdEnd); err != nil {
+		t.Fatalf("saveBackoffState: %v", err)
+	}
+
+	// Read back the persisted value.
+	readEnd := readBackoffState(path)
+	if readEnd.IsZero() {
+		t.Fatal("expected non-zero backoff time after save")
+	}
+
+	// The maximum cap should be 5 minutes.
+	maxCap := 5 * time.Minute
+	remaining := time.Until(readEnd)
+
+	if remaining > maxCap+10*time.Second {
+		t.Fatalf("BUG: readBackoffState returned a deadline %v in the future; "+
+			"saveBackoffState should cap the duration at %v, but it saved the full 24h value",
+			remaining.Round(time.Second), maxCap)
+	}
+}

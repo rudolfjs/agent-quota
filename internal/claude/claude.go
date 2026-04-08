@@ -19,6 +19,7 @@ type Claude struct {
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	baseURL        string
+	forcedReset    bool // set by ResetBackoff; suppresses backoff persistence on the next fetch
 }
 
 // Option configures a Claude provider instance.
@@ -85,6 +86,8 @@ func (c *Claude) Available() bool {
 }
 
 // ResetBackoff clears Claude's persisted local rate-limit cooldown.
+// It also sets an internal flag so the next FetchQuota call skips
+// re-persisting backoff state on 429 responses.
 func (c *Claude) ResetBackoff() error {
 	if c.defaultPathErr != nil {
 		return apierrors.NewConfigError("cannot determine Claude configuration paths", c.defaultPathErr)
@@ -92,6 +95,7 @@ func (c *Claude) ResetBackoff() error {
 	if err := clearBackoffState(c.backoffPath); err != nil {
 		return apierrors.NewConfigError("failed to clear Claude rate-limit backoff state", err)
 	}
+	c.forcedReset = true
 	return nil
 }
 
@@ -101,16 +105,26 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine Claude configuration paths", c.defaultPathErr)
 	}
 
-	backoffEnd := readBackoffState(c.backoffPath)
-	if !backoffEnd.IsZero() && time.Now().Before(backoffEnd) {
-		remaining := time.Until(backoffEnd).Round(time.Second)
-		apiErr := apierrors.NewAPIError(
-			fmt.Sprintf("Claude API rate limit exceeded (HTTP 429), retry after %v", remaining),
-			fmt.Errorf("in backoff period until %v", backoffEnd),
-		)
-		apiErr.StatusCode = http.StatusTooManyRequests
-		apiErr.RetryAfter = remaining
-		return provider.QuotaResult{}, apiErr
+	// Determine whether this fetch was triggered by an explicit user action
+	// (--force flag or ctrl+r). When forced, we skip reading persisted backoff
+	// and skip re-persisting backoff on 429 responses.
+	forced := c.forcedReset || ctx.Value(provider.ForceRetryKey{}) != nil
+	if forced {
+		c.forcedReset = false // consume the flag
+	}
+
+	if !forced {
+		backoffEnd := readBackoffState(c.backoffPath)
+		if !backoffEnd.IsZero() && time.Now().Before(backoffEnd) {
+			remaining := time.Until(backoffEnd).Round(time.Second)
+			apiErr := apierrors.NewAPIError(
+				fmt.Sprintf("Claude API rate limit exceeded (HTTP 429), retry after %v", remaining),
+				fmt.Errorf("in backoff period until %v", backoffEnd),
+			)
+			apiErr.StatusCode = http.StatusTooManyRequests
+			apiErr.RetryAfter = remaining
+			return provider.QuotaResult{}, apiErr
+		}
 	}
 
 	creds, err := ReadCredentials(c.credPath)
@@ -149,7 +163,7 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 				usage, err = apiClient.FetchUsage(ctx, creds.AccessToken)
 				if err != nil {
 					var retryErr *apierrors.DomainError
-					if errors.As(err, &retryErr) && retryErr.StatusCode == http.StatusTooManyRequests && retryErr.RetryAfter > 0 {
+					if !forced && errors.As(err, &retryErr) && retryErr.StatusCode == http.StatusTooManyRequests && retryErr.RetryAfter > 0 {
 						if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(retryErr.RetryAfter)); saveErr != nil {
 							slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
 						}
@@ -161,7 +175,7 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 					slog.Debug("failed to clear rate-limit backoff state", "error", clearErr)
 				}
 				return convertUsage(creds, usage), nil
-			} else if domErr.StatusCode == http.StatusTooManyRequests && domErr.RetryAfter > 0 {
+			} else if !forced && domErr.StatusCode == http.StatusTooManyRequests && domErr.RetryAfter > 0 {
 				if saveErr := saveBackoffState(c.backoffPath, time.Now().Add(domErr.RetryAfter)); saveErr != nil {
 					slog.Debug("failed to persist rate-limit backoff state", "error", saveErr)
 				}

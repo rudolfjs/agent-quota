@@ -49,6 +49,7 @@ func TestClaude_FetchQuota_success(t *testing.T) {
 
 	c := claude.New(
 		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(dir+"/backoff.json"),
 		claude.WithHTTPClient(http.DefaultClient),
 		claude.WithBaseURL(srv.URL),
 	)
@@ -130,6 +131,7 @@ func TestClaude_FetchQuota_extraUsageDisabled(t *testing.T) {
 
 	c := claude.New(
 		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(dir+"/backoff.json"),
 		claude.WithHTTPClient(http.DefaultClient),
 		claude.WithBaseURL(srv.URL),
 	)
@@ -181,6 +183,7 @@ func TestClaude_FetchQuota_401_retryOnce(t *testing.T) {
 
 	c := claude.New(
 		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(dir+"/backoff.json"),
 		claude.WithHTTPClient(http.DefaultClient),
 		claude.WithBaseURL(srv.URL),
 	)
@@ -210,6 +213,7 @@ func TestClaude_FetchQuota_serverError(t *testing.T) {
 
 	c := claude.New(
 		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(dir+"/backoff.json"),
 		claude.WithHTTPClient(http.DefaultClient),
 		claude.WithBaseURL(srv.URL),
 	)
@@ -358,5 +362,108 @@ func validCredsPayload(expiry time.Time) map[string]any {
 			"subscriptionType": "max",
 			"rateLimitTier":    "max_claude_pro",
 		},
+	}
+}
+
+// TestClaude_FetchQuota_forceDoesNotRePersistBackoff verifies that after a
+// manual reset (simulating --force / ctrl+r), a subsequent 429 does NOT
+// re-save the backoff file. Currently FetchQuota unconditionally persists
+// backoff on 429, defeating the user's explicit "retry now" action.
+func TestClaude_FetchQuota_forceDoesNotRePersistBackoff(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"rate_limited"}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	credPath := writeCredFile(t, dir, validCredsPayload(time.Now().Add(time.Hour)))
+	backoffPath := dir + "/backoff.json"
+
+	// Seed an existing backoff file (simulating a prior 429).
+	if err := os.WriteFile(backoffPath, []byte(`{"retry_after_end":"2099-01-01T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatalf("seed backoff file: %v", err)
+	}
+
+	c := claude.New(
+		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(backoffPath),
+		claude.WithHTTPClient(http.DefaultClient),
+		claude.WithBaseURL(srv.URL),
+	)
+
+	// Step 1: User triggers --force / ctrl+r: clear the backoff.
+	if err := c.ResetBackoff(); err != nil {
+		t.Fatalf("ResetBackoff: %v", err)
+	}
+
+	// Verify the file is gone after reset.
+	if _, err := os.Stat(backoffPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected backoff file removed after ResetBackoff, stat err = %v", err)
+	}
+
+	// Step 2: FetchQuota fires and gets a 429 again.
+	_, err := c.FetchQuota(t.Context())
+	if err == nil {
+		t.Fatal("expected error for 429 response")
+	}
+
+	// Bug assertion: after a forced retry, the backoff file should NOT be
+	// re-created. The user explicitly asked to retry — persisting backoff
+	// again would lock them out immediately, defeating the purpose.
+	if _, statErr := os.Stat(backoffPath); statErr == nil {
+		t.Fatal("BUG: backoff file was re-created after forced retry; " +
+			"--force / ctrl+r should suppress backoff persistence on the immediate fetch")
+	}
+}
+
+// TestClaude_FetchQuota_retryAfterCapped verifies that an absurdly large
+// Retry-After value from the API is capped at a reasonable maximum (5 minutes).
+// Currently the CLI trusts the server-provided duration blindly, so a
+// Retry-After of 86400 (24 hours) locks the user out for a full day.
+func TestClaude_FetchQuota_retryAfterCapped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "86400") // 24 hours — absurdly long
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"rate_limited"}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	credPath := writeCredFile(t, dir, validCredsPayload(time.Now().Add(time.Hour)))
+	backoffPath := dir + "/backoff.json"
+
+	c := claude.New(
+		claude.WithCredentialsPath(credPath),
+		claude.WithBackoffPath(backoffPath),
+		claude.WithHTTPClient(http.DefaultClient),
+		claude.WithBaseURL(srv.URL),
+	)
+
+	_, err := c.FetchQuota(t.Context())
+	if err == nil {
+		t.Fatal("expected error for 429 response")
+	}
+
+	// Read the persisted backoff file and check the deadline.
+	data, readErr := os.ReadFile(backoffPath)
+	if readErr != nil {
+		t.Fatalf("expected backoff file to exist: %v", readErr)
+	}
+
+	var state struct {
+		RetryAfterEnd time.Time `json:"retry_after_end"`
+	}
+	if jsonErr := json.Unmarshal(data, &state); jsonErr != nil {
+		t.Fatalf("unmarshal backoff: %v", jsonErr)
+	}
+
+	maxCap := 5 * time.Minute
+	deadline := time.Until(state.RetryAfterEnd)
+	if deadline > maxCap+10*time.Second {
+		t.Fatalf("BUG: persisted backoff deadline is %v in the future (want <= %v); "+
+			"Retry-After should be capped at %v to prevent unreasonable lockouts",
+			deadline.Round(time.Second), maxCap, maxCap)
 	}
 }

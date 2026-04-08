@@ -33,6 +33,12 @@ type BackoffResetter interface {
 	ResetBackoff() error
 }
 
+// ForceRetryKey is a context key that signals a fetch was triggered by an
+// explicit user action (--force flag or ctrl+r). When present in the context,
+// providers should skip re-persisting backoff state on 429 responses, because
+// the user explicitly chose to retry despite the rate limit.
+type ForceRetryKey struct{}
+
 // QuotaResult is the normalised usage snapshot returned by any provider.
 type QuotaResult struct {
 	Provider   string        `json:"provider"`
