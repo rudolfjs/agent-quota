@@ -99,7 +99,7 @@ TUI settings example:
 
 ## Provider setup
 
-- Claude: `claude` CLI login
+- Claude: `claude` CLI login (if 429 or 403 errors occur, re-authenticate Claude Code to get a new OAuth token)
 - OpenAI: `codex login`
 - Gemini: `gemini` CLI login
 - Copilot: `copilot login`
