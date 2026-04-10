@@ -1,8 +1,10 @@
 # Agent Quota Dashboard
 
-CLI tool that fetches AI provider usage/quota data.
+CLI tool that tracks AI provider **OAuth subscription** quotas and usage limits — the rate limits you hit when using tools like Claude Code, GitHub Copilot, and other AI assistants through their CLI/IDE integrations.
 
 Pretty TUI for humans, headless JSON for scripts and agents.
+
+> **Not for API usage.** This tool reads the OAuth-based subscription quotas exposed by provider CLIs, not API key billing. If you pay per-token via the API, this isn't the tool for you.
 
 > Linux x86_64 only for now.
 > The supported install paths in this repo target Linux x86_64 only. Manual `go build` / `go install` may still work on other platforms, but that is unsupported.
@@ -33,13 +35,13 @@ Custom installation instructions:
 ```bash
 # /usr/local/bin
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
-# Install a specific Linix x86_64 release version:
+# Install a specific Linux x86_64 release version:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
 # Skip the confirmation prompt:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | YES=1 sh
 ```
 
-### Install with Go or build form source
+### Install with Go or build from source
 
 This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
 
