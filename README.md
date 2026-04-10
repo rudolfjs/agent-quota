@@ -22,11 +22,15 @@ The standard release path is:
 - GitHub Releases hosts the archives and checksums
 - `install.sh` downloads the correct archive for Linux x86_64
 
-Install the latest Linux x86_64 release:
+Install the latest Linux x86_64 release into `~/.local/bin`:
 
 ```bash
-#  `~/.local/bin`
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
+```
+
+Custom installation instructions:
+
+```bash
 # /usr/local/bin
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
 # Install a specific Linix x86_64 release version:
