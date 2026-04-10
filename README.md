@@ -22,43 +22,27 @@ The standard release path is:
 - GitHub Releases hosts the archives and checksums
 - `install.sh` downloads the correct archive for Linux x86_64
 
-Install the latest Linux x86_64 release to `~/.local/bin`:
+Install the latest Linux x86_64 release:
 
 ```bash
+#  `~/.local/bin`
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
-```
-
-Install the latest Linux x86_64 release to `/usr/local/bin` instead:
-
-```bash
+# /usr/local/bin
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
-```
-
-Install a specific Linux x86_64 release version:
-
-```bash
+# Install a specific Linix x86_64 release version:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
-```
-
-Skip the confirmation prompt (for CI / scripts):
-
-```bash
+# Skip the confirmation prompt:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | YES=1 sh
 ```
 
-### Install with Go
+### Install with Go or build form source
 
 This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
 
 ```bash
+# Go
 go install github.com/rudolfjs/agent-quota/cmd/agent-quota@latest
-```
-
-### Build from source
-
-Manual builds may compile on other platforms, but Linux x86_64 is the only supported target for now.
-
-```bash
+# Source
 go build -o agent-quota ./cmd/agent-quota/
 ```
 
