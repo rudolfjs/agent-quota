@@ -1,10 +1,15 @@
-# agent-quota
+# Agent Quota
 
 CLI tool that fetches AI provider usage/quota data.
+
 Pretty TUI for humans, headless JSON for scripts and agents.
 
 > Linux x86_64 only for now.
 > The supported install paths in this repo target Linux x86_64 only. Manual `go build` / `go install` may still work on other platforms, but that is unsupported.
+
+## Quick View Example
+
+![](docs/img/qexample.png)
 
 ## Install
 
