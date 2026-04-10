@@ -1,4 +1,4 @@
-# Agent Quota
+# Agent Quota Dashboard
 
 CLI tool that fetches AI provider usage/quota data.
 
