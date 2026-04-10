@@ -1,3 +1,0 @@
-kind: Fixed
-body: Fix CI changie job shallow-fetch causing 'no merge base' errors
-time: 2026-04-06T11:39:45.635306471+10:00

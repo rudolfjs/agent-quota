@@ -1,3 +1,0 @@
-kind: Fixed
-body: Replace undefined `die` with `fail` in install.sh TTY fallback
-time: 2026-03-31T12:00:00.000000000+10:00
