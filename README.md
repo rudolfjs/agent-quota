@@ -9,7 +9,7 @@ Pretty TUI for humans, headless JSON for scripts and agents.
 
 ## Quick View Example
 
-![](docs/img/qexample.png)
+<img src="docs/img/qexample.png" width="500" alt="Agent Quota TUI example">
 
 ## Install
 
