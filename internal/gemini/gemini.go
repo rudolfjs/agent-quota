@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -20,19 +20,7 @@ import (
 )
 
 const (
-	defaultBaseURL  = "https://cloudcode-pa.googleapis.com"
-	defaultTokenURL = "https://oauth2.googleapis.com/token"
-
-	// googleClientID and googleSecret are the OAuth 2.0 credentials for the
-	// Gemini CLI's native/installed-app registration. Per RFC 8252 §8.4 and
-	// Google's own documentation for installed apps, the client secret is NOT
-	// confidential — it is embedded in the distributed client binary by design.
-	// Any party with access to the binary can extract it via `strings`, and
-	// Google's token endpoint cannot use it to prove client identity. It exists
-	// only to satisfy the OAuth form parameter requirement.
-	// See: https://developers.google.com/identity/protocols/oauth2/native-app
-	googleClientID = "REDACTED-GOOGLE-CLIENT-ID"
-	googleSecret   = "REDACTED-GOOGLE-CLIENT-SECRET"
+	defaultBaseURL = "https://cloudcode-pa.googleapis.com"
 
 	// maxResponseBytes caps the response body we'll read from any Gemini API
 	// endpoint to prevent a malicious or misbehaving server from exhausting
@@ -73,21 +61,12 @@ type quotaBucket struct {
 	ModelID           string  `json:"modelId,omitempty"`
 }
 
-type tokenRefreshResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
-	Scope       string `json:"scope,omitempty"`
-	TokenType   string `json:"token_type,omitempty"`
-	IDToken     string `json:"id_token,omitempty"`
-}
-
 // Gemini implements provider.Provider for Gemini Code Assist OAuth quota data.
 type Gemini struct {
 	credPath       string
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	baseURL        string
-	tokenURL       string
 }
 
 // Option configures a Gemini provider instance.
@@ -105,10 +84,6 @@ func WithBaseURL(url string) Option {
 	return func(g *Gemini) { g.baseURL = url }
 }
 
-func WithTokenURL(url string) Option {
-	return func(g *Gemini) { g.tokenURL = url }
-}
-
 // defaultHTTPClient is the HTTP client used when none is provided via WithHTTPClient.
 // A 30-second timeout prevents hung API servers from blocking the process indefinitely.
 var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
@@ -117,7 +92,6 @@ func New(opts ...Option) *Gemini {
 	g := &Gemini{
 		httpClient: defaultHTTPClient,
 		baseURL:    defaultBaseURL,
-		tokenURL:   defaultTokenURL,
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -154,9 +128,13 @@ func (g *Gemini) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	}
 
 	if creds.IsExpired() {
-		creds, err = g.refreshCredentials(ctx, creds)
+		slog.Debug("Gemini token expired, attempting refresh")
+		if refreshErr := RefreshToken(ctx, g.credPath); refreshErr != nil {
+			return provider.QuotaResult{}, refreshErr
+		}
+		creds, err = readCredentials(g.credPath)
 		if err != nil {
-			return provider.QuotaResult{}, err
+			return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", err)
 		}
 	}
 
@@ -229,58 +207,6 @@ func doJSONRequest[T any](ctx context.Context, client *http.Client, method, targ
 		return nil, apierrors.NewAPIError("failed to parse Gemini response", err)
 	}
 	return &out, nil
-}
-
-func (g *Gemini) refreshCredentials(ctx context.Context, creds oauthCredentials) (oauthCredentials, error) {
-	if creds.RefreshToken == "" {
-		return oauthCredentials{}, apierrors.NewAuthError("Gemini authentication expired; run `gemini` again", fmt.Errorf("missing refresh token"))
-	}
-
-	form := url.Values{}
-	form.Set("client_id", googleClientID)
-	form.Set("client_secret", googleSecret)
-	form.Set("grant_type", "refresh_token")
-	form.Set("refresh_token", creds.RefreshToken)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.tokenURL, bytes.NewBufferString(form.Encode()))
-	if err != nil {
-		return oauthCredentials{}, apierrors.NewNetworkError("failed to create Gemini token refresh request", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "agent-quota")
-
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return oauthCredentials{}, apierrors.NewNetworkError("Gemini token refresh failed", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return oauthCredentials{}, apierrors.NewAuthError("Gemini authentication expired; run `gemini` again", fmt.Errorf("HTTP %d", resp.StatusCode))
-	}
-
-	var refreshed tokenRefreshResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&refreshed); err != nil {
-		return oauthCredentials{}, apierrors.NewAPIError("failed to parse Gemini token refresh response", err)
-	}
-	if refreshed.AccessToken == "" {
-		return oauthCredentials{}, apierrors.NewAuthError("Gemini authentication expired; run `gemini` again", fmt.Errorf("missing access_token in refresh response"))
-	}
-
-	creds.AccessToken = refreshed.AccessToken
-	creds.Scope = refreshed.Scope
-	creds.TokenType = refreshed.TokenType
-	creds.IDToken = refreshed.IDToken
-	if refreshed.ExpiresIn > 0 {
-		creds.ExpiryDate = time.Now().Add(time.Duration(refreshed.ExpiresIn) * time.Second).UnixMilli()
-	}
-	if err := writeCredentials(g.credPath, creds); err != nil {
-		return oauthCredentials{}, apierrors.NewConfigError("failed to persist refreshed Gemini credentials", err)
-	}
-	return creds, nil
 }
 
 func convertQuota(loadResp *loadCodeAssistResponse, quotaResp *retrieveUserQuotaResponse) provider.QuotaResult {
@@ -357,17 +283,6 @@ func readCredentials(path string) (oauthCredentials, error) {
 		return oauthCredentials{}, fmt.Errorf("parse credentials file: %w", err)
 	}
 	return creds, nil
-}
-
-func writeCredentials(path string, creds oauthCredentials) error {
-	data, err := json.MarshalIndent(creds, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal credentials file: %w", err)
-	}
-	if err := fileutil.AtomicWriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write credentials file: %w", err)
-	}
-	return nil
 }
 
 // DefaultCredentialsPath returns the default path to the Gemini credentials file.

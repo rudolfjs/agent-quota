@@ -40,7 +40,6 @@ func TestFetchQuota_oversizedResponse_returnsError(t *testing.T) {
 		gemini.WithCredentialsPath(credPath),
 		gemini.WithHTTPClient(&http.Client{}),
 		gemini.WithBaseURL(srv.URL),
-		gemini.WithTokenURL(srv.URL+"/token"),
 	)
 	_, err := p.FetchQuota(t.Context())
 	if err == nil {
@@ -87,7 +86,6 @@ func TestFetchQuota_allErrorPaths_returnDomainError(t *testing.T) {
 				gemini.WithCredentialsPath(credPath),
 				gemini.WithHTTPClient(&http.Client{}),
 				gemini.WithBaseURL(srv.URL),
-				gemini.WithTokenURL(srv.URL+"/token"),
 			)
 			_, err := p.FetchQuota(t.Context())
 			if err == nil {

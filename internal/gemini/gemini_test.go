@@ -2,11 +2,11 @@ package gemini_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,7 +76,6 @@ func TestGemini_FetchQuota_success(t *testing.T) {
 		gemini.WithCredentialsPath(credPath),
 		gemini.WithHTTPClient(http.DefaultClient),
 		gemini.WithBaseURL(srv.URL),
-		gemini.WithTokenURL(srv.URL+"/oauth2/token"),
 	)
 
 	result, err := p.FetchQuota(t.Context())
@@ -110,24 +109,33 @@ func TestGemini_FetchQuota_success(t *testing.T) {
 }
 
 func TestGemini_FetchQuota_refreshesExpiredToken(t *testing.T) {
-	var refreshCalls atomic.Int32
-	var loadCalls atomic.Int32
+	dir := t.TempDir()
+
+	// Create a fake "gemini" script that simulates a token refresh by
+	// writing updated credentials to the file.
+	fakeGemini := filepath.Join(dir, "fake-gemini")
+	credPath := filepath.Join(dir, "oauth_creds.json")
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		`printf '{"access_token":"tok_new","refresh_token":"ref_valid","expiry_date":%d}' > %s`+"\n",
+		time.Now().Add(time.Hour).UnixMilli(), credPath)
+	if err := os.WriteFile(fakeGemini, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake gemini script: %v", err)
+	}
+	t.Setenv("AGENT_QUOTA_GEMINI_PATH", fakeGemini)
+
+	// Write expired credentials.
+	writeCredFile(t, dir, map[string]any{
+		"access_token":  "tok_old",
+		"refresh_token": "ref_valid",
+		"expiry_date":   time.Now().Add(-time.Hour).UnixMilli(),
+	})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer tok_new" {
+			t.Errorf("Authorization = %q, want %q", got, "Bearer tok_new")
+		}
 		switch r.URL.Path {
-		case "/oauth2/token":
-			refreshCalls.Add(1)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "tok_new",
-				"expires_in":   3600,
-				"token_type":   "Bearer",
-			})
 		case "/v1internal:loadCodeAssist":
-			loadCalls.Add(1)
-			if got := r.Header.Get("Authorization"); got != "Bearer tok_new" {
-				t.Fatalf("Authorization = %q, want %q", got, "Bearer tok_new")
-			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"currentTier":             map[string]any{"id": "standard-tier"},
@@ -138,7 +146,6 @@ func TestGemini_FetchQuota_refreshesExpiredToken(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"buckets": []map[string]any{{
 					"modelId":           "gemini-2.5-flash",
-					"tokenType":         "REQUESTS",
 					"remainingFraction": 1.0,
 					"resetTime":         "2026-03-30T00:49:32Z",
 				}},
@@ -149,28 +156,18 @@ func TestGemini_FetchQuota_refreshesExpiredToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	dir := t.TempDir()
-	credPath := writeCredFile(t, dir, map[string]any{
-		"access_token":  "tok_old",
-		"refresh_token": "ref_valid",
-		"expiry_date":   time.Now().Add(-time.Hour).UnixMilli(),
-	})
-
 	p := gemini.New(
 		gemini.WithCredentialsPath(credPath),
 		gemini.WithHTTPClient(http.DefaultClient),
 		gemini.WithBaseURL(srv.URL),
-		gemini.WithTokenURL(srv.URL+"/oauth2/token"),
 	)
 
-	if _, err := p.FetchQuota(t.Context()); err != nil {
+	result, err := p.FetchQuota(t.Context())
+	if err != nil {
 		t.Fatalf("FetchQuota() error = %v", err)
 	}
-	if refreshCalls.Load() != 1 {
-		t.Fatalf("refresh calls = %d, want 1", refreshCalls.Load())
-	}
-	if loadCalls.Load() != 1 {
-		t.Fatalf("load calls = %d, want 1", loadCalls.Load())
+	if result.Provider != "gemini" {
+		t.Fatalf("Provider = %q, want %q", result.Provider, "gemini")
 	}
 
 	got := readJSONFile(t, credPath)
