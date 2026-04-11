@@ -63,3 +63,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, CI, changie, and release
 - **Headers**: `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`, `User-Agent: claude-code/<version>`
 - **Credentials**: `~/.claude/.credentials.json` → field `claudeAiOauth.accessToken`
 - **Token refresh**: exec `claude` CLI (refreshes automatically), then re-read credentials
+
+## Gemini Code Assist API
+
+- **Endpoints**: `POST https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist`, `POST .../v1internal:retrieveUserQuota`
+- **Headers**: `Authorization: Bearer <token>`, `User-Agent: agent-quota`
+- **Credentials**: `~/.gemini/oauth_creds.json` (written by the `gemini` CLI)
+- **Token refresh**: exec `gemini -p ""` (refreshes on startup), then re-read credentials
+- **Binary override**: `AGENT_QUOTA_GEMINI_PATH` env var (for testing / custom installs)
