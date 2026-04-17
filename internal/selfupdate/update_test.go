@@ -141,6 +141,55 @@ func TestRun_installsLatestRelease(t *testing.T) {
 	if !bytes.Equal(installed, marker) {
 		t.Fatalf("installed bytes = %q, want %q", installed, marker)
 	}
+	info, err := os.Stat(binPath)
+	if err != nil {
+		t.Fatalf("stat installed binary: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("installed binary has no executable bit set: mode=%#o", info.Mode().Perm())
+	}
+}
+
+// TestRun_installedBinaryIsExecutable is the regression guard for the
+// self-update permission-denied bug: os.CreateTemp produces a 0o600 staging
+// file, and O_CREATE|O_TRUNC only applies the perm argument on file
+// creation, so the installed binary must be explicitly chmod'd to stay
+// executable after the atomic rename.
+func TestRun_installedBinaryIsExecutable(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	archive := buildTarGzArchive(t, []byte("new-binary-payload"))
+	servers := newTestReleaseServers(t, "v0.3.0", archive, "")
+
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "agent-quota")
+	if err := os.WriteFile(binPath, []byte("old"), 0o755); err != nil {
+		t.Fatalf("seed binary: %v", err)
+	}
+
+	if _, err := Run(context.Background(), Options{
+		CurrentVersion: "v0.2.2",
+		APIBaseURL:     servers.api.URL,
+		AssetBaseURL:   servers.assets.URL + "/v0.3.0",
+		BinaryPath:     binPath,
+		Out:            io.Discard,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	info, err := os.Stat(binPath)
+	if err != nil {
+		t.Fatalf("stat installed binary: %v", err)
+	}
+	mode := info.Mode().Perm()
+	if mode&0o100 == 0 {
+		t.Fatalf("installed binary is not executable by owner: mode=%#o", mode)
+	}
+	if mode != 0o755 {
+		t.Fatalf("installed binary mode = %#o, want 0o755", mode)
+	}
 }
 
 func TestRun_noUpdateWhenAlreadyOnLatest(t *testing.T) {

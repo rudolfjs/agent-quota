@@ -212,6 +212,13 @@ func copyFile(src, dst string, perm os.FileMode) error {
 	if err != nil {
 		return apierrors.NewConfigError("failed to open destination for copy", err)
 	}
+	// O_CREATE only applies perm when the file is newly created; swapBinary
+	// hands us a path returned by os.CreateTemp (mode 0o600), so re-chmod
+	// explicitly or the installed binary ends up non-executable.
+	if err := out.Chmod(perm); err != nil {
+		_ = out.Close()
+		return apierrors.NewConfigError("failed to set permissions on copied file", err)
+	}
 	if _, err := io.Copy(out, in); err != nil {
 		_ = out.Close()
 		return apierrors.NewConfigError("failed to copy file contents", err)
