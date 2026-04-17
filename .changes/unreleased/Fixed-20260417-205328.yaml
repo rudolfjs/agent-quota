@@ -1,0 +1,3 @@
+kind: Fixed
+body: Normalize Claude extra_usage cents→dollars for non-USD accounts (e.g. AUD), which previously leaked raw cent values into the TUI.
+time: 2026-04-17T20:53:28.961333993+10:00
