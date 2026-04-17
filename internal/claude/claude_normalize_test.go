@@ -2,6 +2,7 @@ package claude_test
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -113,5 +114,57 @@ func TestFetchUsage_normalizesCentBasedExtraUsageAmounts(t *testing.T) {
 	}
 	if resp.ExtraUsage.Utilization != 0.4 {
 		t.Fatalf("ExtraUsage.Utilization = %f, want 0.4", resp.ExtraUsage.Utilization)
+	}
+}
+
+func TestFetchUsage_normalizesExtraUsageWithFractionalCents(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"five_hour": map[string]any{
+				"utilization": 12,
+				"resets_at":   "2025-03-29T20:00:00Z",
+			},
+			"seven_day": map[string]any{
+				"utilization": 41,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_oauth_apps": map[string]any{
+				"utilization": 0,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_opus": map[string]any{
+				"utilization": 0,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"seven_day_sonnet": map[string]any{
+				"utilization": 14,
+				"resets_at":   "2025-04-02T00:00:00Z",
+			},
+			"extra_usage": map[string]any{
+				"is_enabled":    true,
+				"monthly_limit": 14000.0,
+				"used_credits":  3457.002,
+				"utilization":   24.69,
+				"currency":      "USD",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := claude.NewAPIClient(srv.URL, http.DefaultClient)
+	resp, err := client.FetchUsage(t.Context(), "tok_test")
+	if err != nil {
+		t.Fatalf("FetchUsage: %v", err)
+	}
+
+	if resp.ExtraUsage.MonthlyLimit != 140.0 {
+		t.Fatalf("ExtraUsage.MonthlyLimit = %f, want 140.0", resp.ExtraUsage.MonthlyLimit)
+	}
+	if math.Abs(resp.ExtraUsage.UsedCredits-34.57002) > 1e-6 {
+		t.Fatalf("ExtraUsage.UsedCredits = %f, want ~34.57002", resp.ExtraUsage.UsedCredits)
+	}
+	if math.Abs(resp.ExtraUsage.Utilization-0.2469) > 1e-9 {
+		t.Fatalf("ExtraUsage.Utilization = %f, want ~0.2469", resp.ExtraUsage.Utilization)
 	}
 }
