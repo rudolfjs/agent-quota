@@ -16,7 +16,7 @@ import (
 // Options tune Run without adding a dozen positional arguments.
 type Options struct {
 	// OwnerRepo identifies the upstream repo as "owner/repo".
-	// Defaults to "schnetlerr/agent-quota" when empty.
+	// Defaults to "rudolfjs/agent-quota" when empty.
 	OwnerRepo string
 
 	// CurrentVersion is the version string baked into the running binary.
@@ -63,7 +63,7 @@ type Result struct {
 	InstalledPath string
 }
 
-const defaultOwnerRepo = "schnetlerr/agent-quota"
+const defaultOwnerRepo = "rudolfjs/agent-quota"
 
 // Run executes the self-update pipeline end-to-end.
 //

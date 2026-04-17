@@ -32,7 +32,7 @@ type Release struct {
 // an httptest server URL via baseURL.
 type ReleaseClient struct {
 	baseURL    string // e.g. "https://api.github.com"
-	ownerRepo  string // e.g. "schnetlerr/agent-quota"
+	ownerRepo  string // e.g. "rudolfjs/agent-quota"
 	httpClient *http.Client
 }
 

@@ -3,7 +3,7 @@ set -eu
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-OWNER_REPO="${OWNER_REPO:-schnetlerr/agent-quota}"
+OWNER_REPO="${OWNER_REPO:-rudolfjs/agent-quota}"
 BINARY="agent-quota"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'self-update: point release lookup at rudolfjs/agent-quota (was schnetlerr/agent-quota, which returned ''No releases found''). Also fixes scripts/install.sh default OWNER_REPO.'
+time: 2026-04-18T06:54:48.83024421+10:00

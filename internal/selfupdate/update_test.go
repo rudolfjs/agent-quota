@@ -53,10 +53,10 @@ func newTestReleaseServers(t *testing.T, tag string, archive []byte, checksumNam
 	assets := httptest.NewServer(assetMux)
 
 	apiMux := http.NewServeMux()
-	apiMux.HandleFunc("/repos/schnetlerr/agent-quota/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+	apiMux.HandleFunc("/repos/rudolfjs/agent-quota/releases/latest", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(Release{TagName: tag, HTMLURL: assets.URL, Prerelease: false})
 	})
-	apiMux.HandleFunc("/repos/schnetlerr/agent-quota/releases", func(w http.ResponseWriter, r *http.Request) {
+	apiMux.HandleFunc("/repos/rudolfjs/agent-quota/releases", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]Release{{TagName: tag, HTMLURL: assets.URL, Prerelease: false}})
 	})
 	api := httptest.NewServer(apiMux)
@@ -119,7 +119,6 @@ func TestRun_installsLatestRelease(t *testing.T) {
 
 	var out bytes.Buffer
 	result, err := Run(context.Background(), Options{
-		OwnerRepo:      "schnetlerr/agent-quota",
 		CurrentVersion: "v0.2.2",
 		APIBaseURL:     servers.api.URL,
 		AssetBaseURL:   servers.assets.URL + "/v0.3.0",
@@ -160,7 +159,6 @@ func TestRun_noUpdateWhenAlreadyOnLatest(t *testing.T) {
 	}
 
 	result, err := Run(context.Background(), Options{
-		OwnerRepo:      "schnetlerr/agent-quota",
 		CurrentVersion: "v0.3.0",
 		APIBaseURL:     servers.api.URL,
 		AssetBaseURL:   servers.assets.URL + "/v0.3.0",
@@ -198,7 +196,6 @@ func TestRun_checkOnlySkipsInstall(t *testing.T) {
 	}
 
 	result, err := Run(context.Background(), Options{
-		OwnerRepo:      "schnetlerr/agent-quota",
 		CurrentVersion: "v0.2.2",
 		APIBaseURL:     servers.api.URL,
 		AssetBaseURL:   servers.assets.URL + "/v0.3.0",
@@ -241,7 +238,6 @@ func TestRun_checksumMismatchAbortsInstall(t *testing.T) {
 	}
 
 	_, err := Run(context.Background(), Options{
-		OwnerRepo:      "schnetlerr/agent-quota",
 		CurrentVersion: "v0.2.2",
 		APIBaseURL:     servers.api.URL,
 		AssetBaseURL:   servers.assets.URL + "/v0.3.0",
