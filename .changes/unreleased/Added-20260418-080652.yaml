@@ -1,3 +1,0 @@
-kind: Added
-body: Minimal `.devcontainer/` (Go 1.25 + gh CLI) and `scripts/e2e-smoke.sh` smoke test that builds the CLI and exercises the `--help` / `--version` wiring. Catches regressions like the self-update permission-denied bug that no unit test would see.
-time: 2026-04-18T08:06:52.864645505+10:00

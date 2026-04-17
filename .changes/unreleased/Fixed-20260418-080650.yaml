@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'self-update: ensure the installed binary keeps its executable bit. `os.CreateTemp` creates the staging file with mode 0o600, and `O_CREATE|O_TRUNC` does not re-apply `perm` on an existing file, so the atomically-renamed binary ended up non-executable. `copyFile` now explicitly `Chmod`s to the requested mode.'
-time: 2026-04-18T08:06:50.496567608+10:00
