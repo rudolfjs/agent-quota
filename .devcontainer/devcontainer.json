@@ -1,0 +1,24 @@
+{
+    "name": "agent-quota",
+    "image": "mcr.microsoft.com/devcontainers/go:1-1.25-bookworm",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "remoteUser": "vscode",
+    "containerEnv": {
+        "GOFLAGS": "-buildvcs=false"
+    },
+    "postCreateCommand": "sh scripts/install-deps.sh",
+    "postStartCommand": "go mod download",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go"
+            ],
+            "settings": {
+                "go.toolsManagement.checkForUpdates": "off",
+                "go.useLanguageServer": true
+            }
+        }
+    }
+}
