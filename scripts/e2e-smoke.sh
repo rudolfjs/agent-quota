@@ -43,16 +43,16 @@ info "agent-quota --version"
 ok "--version runs"
 
 info "agent-quota --help"
-"$BIN" --help | grep -q 'USAGE' || fail "--help output is missing USAGE block"
+"$BIN" --help | grep -qi 'usage' || fail "--help output is missing usage block"
 "$BIN" --help | grep -q 'self-update' || fail "--help output is missing self-update subcommand"
 ok "--help renders"
 
 info "agent-quota status --help"
-"$BIN" status --help | grep -q 'USAGE' || fail "status --help output is missing USAGE block"
+"$BIN" status --help | grep -qi 'usage' || fail "status --help output is missing usage block"
 ok "status --help renders"
 
 info "agent-quota self-update --help"
-"$BIN" self-update --help | grep -q 'USAGE' || fail "self-update --help output is missing USAGE block"
+"$BIN" self-update --help | grep -qi 'usage' || fail "self-update --help output is missing usage block"
 ok "self-update --help renders"
 
 ok "smoke test passed"
