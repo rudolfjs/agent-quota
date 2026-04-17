@@ -152,7 +152,10 @@ func shouldNormalizeExtraUsageAmounts(extra ExtraUsageData) bool {
 	if extra.Currency != "" && !strings.EqualFold(extra.Currency, "USD") {
 		return false
 	}
-	return isWholeNumber(extra.MonthlyLimit) && isWholeNumber(extra.UsedCredits) && extra.MonthlyLimit >= 1000
+	// monthly_limit is a pricing-tier config and always arrives as whole cents;
+	// used_credits is runtime token accounting and may carry fractional cents,
+	// so only the limit is used as the cents-vs-dollars signal.
+	return isWholeNumber(extra.MonthlyLimit) && extra.MonthlyLimit >= 1000
 }
 
 func isWholeNumber(value float64) bool {
