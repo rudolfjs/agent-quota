@@ -1,0 +1,3 @@
+kind: Added
+body: Added 'agent-quota self-update' (aka 'aq self-update') which downloads the latest GitHub release, verifies the sha256 checksum, and atomically swaps the running binary. Supports --check (report only), --force (reinstall same version), and --pre (include prereleases). Linux/amd64 only.
+time: 2026-04-17T21:04:15.713578452+10:00

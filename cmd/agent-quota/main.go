@@ -132,6 +132,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "enable debug logging to stderr")
 
 	rootCmd.AddCommand(cli.NewStatusCommand(registry))
+	rootCmd.AddCommand(cli.NewSelfUpdateCommand())
 
 	if err := fang.Execute(ctx, rootCmd, fang.WithVersion(version.String())); err != nil {
 		os.Exit(1)
