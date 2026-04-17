@@ -1,0 +1,185 @@
+name: Jules CI Review
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  fix-failure:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      !startsWith(github.event.workflow_run.head_branch, 'jules/')
+    concurrency:
+      group: jules-ci-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Fetch failed job details
+        id: failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            const failed = jobs.data.jobs
+              .filter(j => j.conclusion === 'failure')
+              .map(j => j.name);
+            core.setOutput('failed_jobs', failed.join(', '));
+            core.setOutput('run_url', context.payload.workflow_run.html_url);
+            core.setOutput('workflow_name', context.payload.workflow_run.name);
+            core.setOutput('branch', context.payload.workflow_run.head_branch);
+
+      - name: Invoke Jules — CI Failure Fix
+        uses: nq-rdl/jules-action@d8ed19ed75a6c2a35fd4e06e5b2ca7cd68b27046  # main
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ steps.failure.outputs.branch }}
+          include_commit_log: true
+          require_plan_approval: false
+          title: "CI Fix: ${{ steps.failure.outputs.workflow_name }} on ${{ steps.failure.outputs.branch }}"
+          prompt: |
+            You are a CI Failure Analyst and Fixer for **agent-quota**, a Go 1.25 CLI
+            that fetches AI-provider usage/quota data. It renders a Bubbletea v2 TUI
+            for humans and headless JSON output for scripts/agents.
+
+            Read `CLAUDE.md` at the repo root for project conventions, architecture, and
+            tech-stack constraints. Read `CONTRIBUTING.md` for the build, test, changie,
+            and release workflows. These are the authoritative sources — do not reproduce
+            their contents from memory.
+
+            ## CI workflow layout
+
+            This repo has a single workflow named **CI** (`.github/workflows/ci.yml`) with
+            three parallel jobs. Any one of them can fail:
+
+            1. **go-checks** — `gofmt`, `go vet`, `golangci-lint run ./...`,
+               `go test -race -count=1 ./...`, `go build ./cmd/agent-quota/`, and
+               `sh -n scripts/install.sh`.
+            2. **lefthook** — runs the `pre-commit` and `pre-push` hooks in CI via
+               `lefthook run pre-commit --no-tty` and
+               `lefthook run pre-push --all-files --no-tty`. Hook definitions live in
+               `lefthook.yml`.
+            3. **changie** — PRs that touch product code (`cmd/`, `internal/`, `go.mod`,
+               `go.sum`, `scripts/install.sh`, `lefthook.yml`, excluding `*_test.go`)
+               must add a fragment to `.changes/unreleased/`. PRs limited to docs or
+               tests do not need a fragment.
+
+            ## Failure context
+
+            The CI workflow "${{ steps.failure.outputs.workflow_name }}" has failed on
+            branch `${{ steps.failure.outputs.branch }}`.
+
+            Failed job(s): ${{ steps.failure.outputs.failed_jobs }}
+            Run URL: ${{ steps.failure.outputs.run_url }}
+
+            ## Diagnosis process
+
+            ### 1. Identify the failure type
+
+            Map the failed job name(s) above to one of these domains:
+
+            - **`go-checks` failure** — a formatting, vet, lint, test, build, or installer
+              script error. Reproduce locally with `make release-check` (which runs the
+              full local check matrix) or the specific command from
+              `.github/workflows/ci.yml`.
+            - **`lefthook` failure** — a pre-commit or pre-push hook failed. This usually
+              overlaps with `go-checks` (same linters/tests run). Reproduce with
+              `lefthook run pre-commit --no-tty` and
+              `lefthook run pre-push --all-files --no-tty`.
+            - **`changie` failure** — the PR touches product code but has no fragment in
+              `.changes/unreleased/`. Read the job log to confirm whether the failure
+              reason is "requires a changie fragment" or a configuration/dry-run error.
+
+            ### 2. Reproduce and diagnose
+
+            - Read the recent commits on the branch to understand what changed.
+            - For `go-checks` / `lefthook` failures: run the exact failing command from
+              the CI job log. Do not skip reproduction — fixes based on guessed root
+              causes often introduce second-order breakages.
+            - For `changie` failures: run `git diff origin/main...HEAD --name-only` to see
+              which product files changed and pick the appropriate `kind`.
+
+            ### 3. Fix
+
+            Keep the fix **minimal** — address only the CI failure, not surrounding code.
+            Do not refactor, do not add features, do not rename variables that happen to
+            catch your eye.
+
+            **`go-checks` / `lefthook` fixes:**
+            - `gofmt` failure → run `gofmt -w` on the listed files.
+            - `go vet` failure → address the specific vet complaint.
+            - `golangci-lint` failure → fix the exact lint issue reported; do not change
+              the linter configuration unless the rule itself is the problem.
+            - `go test` failure → fix the failing test or the production code. Follow the
+              TDD conventions in `CLAUDE.md`. Never silence a test or use `t.Skip()` to
+              get CI green.
+            - `go build` failure → fix the compilation error.
+            - Installer script (`sh -n scripts/install.sh`) failure → fix the syntax.
+
+            **`changie` fragment fixes:**
+            Create a fragment with
+            `changie new --interactive=false --kind <KIND> --body "<one-line summary>"`
+            where `<KIND>` is one of `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+            or `Security`. Infer the correct kind from the branch's diff:
+            - New functionality → `Added`
+            - Behaviour change to existing code → `Changed`
+            - Bug fix → `Fixed`
+            - Security-relevant fix → `Security`
+
+            Do not hand-craft the YAML filename — `changie new` generates the correct
+            name and format.
+
+            ## Repo-specific invariants (from `CLAUDE.md`)
+
+            These must hold after your fix:
+
+            - Charm TUI imports MUST be `charm.land/*` v2 — never
+              `github.com/charmbracelet/*`.
+            - `View()` on the root TUI model returns `tea.View` via `tea.NewView(s)`,
+              never a raw string. Sub-components return `string`.
+            - `tea.Quit` is a value (no parentheses), not a function call.
+            - Key presses use `tea.KeyPressMsg`, not `tea.KeyMsg`.
+            - Errors crossing a trust boundary use `internal/errors.DomainError`.
+            - Never log, print, or expose access tokens, refresh tokens, or API keys —
+              even partially.
+            - Use `log/slog` for diagnostics; never `fmt.Printf` or the deprecated `log`
+              package.
+
+            ## Verification before opening the PR
+
+            Run the command matrix CI uses. Do not declare the fix complete until these
+            all pass locally in the Jules sandbox:
+
+            ```
+            gofmt -l $(find . -type f -name '*.go')   # must print nothing
+            go vet ./...
+            golangci-lint run ./...
+            go test -race -count=1 ./...
+            go build -o /tmp/agent-quota ./cmd/agent-quota/
+            sh -n scripts/install.sh
+            lefthook run pre-commit --no-tty
+            lefthook run pre-push --all-files --no-tty
+            ```
+
+            If the failure was in `changie`, also verify a fragment now exists:
+            `ls .changes/unreleased/*.yaml`.
+
+            ## Instructions
+
+            1. Start from branch `${{ steps.failure.outputs.branch }}`.
+            2. Diagnose the CI failure using the process above.
+            3. Apply the minimal fix.
+            4. Run the full verification matrix.
+            5. Commit with a Conventional Commit message (`fix(ci): ...`,
+               `chore(ci): ...`, or `docs(changelog): ...` as appropriate — see
+               `CONTRIBUTING.md`).
+            6. Open a pull request with the fix when complete. Reference the failing run
+               URL in the PR body.
