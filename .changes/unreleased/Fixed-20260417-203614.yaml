@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Claude provider: normalize extra usage cents when used_credits carries sub-cent fractions from per-token billing, so the TUI shows dollar amounts instead of raw cent values'
+time: 2026-04-17T20:36:14.845482162+10:00
