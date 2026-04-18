@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'tui: guide marker now stays inside the filled region when utilization > guide. At narrow bar widths the fill cell count and marker cell were rounded independently, which could place the │ past the visual fill edge (e.g. util=20%, guide=16% on a 12-cell bar rendered as `██│░░░░░░░░░`, contradicting the numeric ordering). A new `guidePosition` helper snaps the marker inward so visual ordering matches numeric ordering. (#60)'
-time: 2026-04-18T10:18:05.19638819+10:00
