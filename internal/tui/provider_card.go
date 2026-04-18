@@ -218,11 +218,33 @@ func renderQuotaBar(theme providerTheme, utilization float64, width int, guide f
 	if guide < 0 || guide > 1 {
 		return bar
 	}
-	return injectGuideMarker(bar, barWidth, guide)
+	return injectGuideMarker(bar, guidePosition(utilization, guide, barWidth))
 }
 
-// injectGuideMarker splices a fluorescent blue │ into the progress bar string at
-// the visible character position corresponding to the guide fraction.
+// guidePosition snaps the guide marker cell so visual ordering matches the
+// numeric comparison between utilization and guide: when guide ≤ util the
+// marker sits inside the filled region; when guide > util it sits past it.
+// At saturation (fw == barWidth) there is no empty cell left, so the marker
+// is clamped to the last cell even though the "past fill" invariant can no
+// longer hold at cell resolution.
+func guidePosition(utilization, guide float64, barWidth int) int {
+	// math.Round matches bubbles/progress barView (progress.go:360 in v2.1.0);
+	// using a different rounding mode here would desync fw from what the bar
+	// actually renders and the snap logic would misfire.
+	fw := int(math.Round(utilization * float64(barWidth)))
+	pos := int(math.Round(guide * float64(barWidth)))
+	if guide <= utilization && pos >= fw {
+		pos = fw - 1
+	}
+	if guide > utilization && pos < fw {
+		pos = fw
+	}
+	return max(0, min(pos, barWidth-1))
+}
+
+// injectGuideMarker splices a fluorescent blue │ into the progress bar at the
+// caller-supplied cell index. Callers are responsible for snapping the index
+// into range via guidePosition.
 //
 // With WithColorFunc the bar wraps each filled cell individually:
 //
@@ -231,10 +253,7 @@ func renderQuotaBar(theme providerTheme, utilization float64, width int, guide f
 // The empty section is a single multi-char span. We handle both cases by
 // replacing only the target character, closing/re-opening the active ANSI span
 // around the marker.
-func injectGuideMarker(bar string, barWidth int, guide float64) string {
-	guidePos := int(math.Round(guide * float64(barWidth)))
-	guidePos = max(0, min(guidePos, barWidth-1))
-
+func injectGuideMarker(bar string, guidePos int) string {
 	guideStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(guideColorHex)).Bold(true)
 	marker := guideStyle.Render("│")
 

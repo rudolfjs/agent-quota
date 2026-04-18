@@ -470,7 +470,7 @@ func TestInjectGuideMarker_placesMarkerAtCorrectPosition(t *testing.T) {
 	bar.SetWidth(40)
 	barStr := bar.ViewAs(0.5)
 
-	result := injectGuideMarker(barStr, 40, 0.25)
+	result := injectGuideMarker(barStr, 10) // cell index for 25% of 40
 	// The result should contain the │ character from the guide marker.
 	if !strings.Contains(result, "│") {
 		t.Errorf("expected guide marker │ in bar, got:\n%q", result)
