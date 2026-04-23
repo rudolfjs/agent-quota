@@ -219,7 +219,10 @@ main() {
 
   # Extract
   info "extracting..."
-  tar -xzf "$tmpdir/$archive" -C "$tmpdir"
+  # cd into tmpdir and pass a relative archive path: some tar implementations
+  # (bsdtar/libarchive, busybox) misinterpret absolute -f paths when combined
+  # with -C, producing "Cannot open" errors with a duplicated path prefix.
+  (cd -- "$tmpdir" && tar -xzf "$archive")
   binary_path=$(find "$tmpdir" -type f -name "$BINARY" | head -n 1)
   if [ -z "$binary_path" ]; then
     fail "could not locate binary in archive"

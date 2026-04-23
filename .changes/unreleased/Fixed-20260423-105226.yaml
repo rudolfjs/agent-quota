@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'installer: extract release archive via subshell+relative path so non-GNU tar variants no longer fail with duplicated-path "Cannot open" errors (#63)'
+time: 2026-04-23T10:52:26.376209904+10:00
