@@ -69,7 +69,7 @@ jobs:
 
       - name: Install changie
         if: steps.changelog.outputs.mode == 'batch'
-        uses: miniscruff/changie-action@v2
+        uses: miniscruff/changie-action@v3
         with:
           version: latest
 
