@@ -6,6 +6,8 @@ versionExt: md
 versionFormat: '## {{.Version}} - {{.Time.Format "2006-01-02"}}'
 kindFormat: '### {{.Kind}}'
 changeFormat: '* {{.Body}}'
+footerFormat: |
+    > Update with `aq self-update` on Linux/amd64.
 kinds:
     - label: Added
       auto: minor
@@ -22,5 +24,6 @@ kinds:
 newlines:
     afterChangelogHeader: 1
     beforeChangelogVersion: 1
+    beforeFooterTemplate: 1
     endOfVersion: 1
 envPrefix: CHANGIE_
