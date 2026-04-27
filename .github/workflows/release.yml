@@ -136,7 +136,7 @@ jobs:
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build \
             -trimpath \
-            -ldflags="-s -w -X github.com/schnetlerr/agent-quota/internal/version.buildVersion=$TAG -X github.com/schnetlerr/agent-quota/internal/version.buildCommit=$short_commit" \
+            -ldflags="-s -w -X github.com/rudolfjs/agent-quota/internal/version.buildVersion=$TAG -X github.com/rudolfjs/agent-quota/internal/version.buildCommit=$short_commit" \
             -o "$package_dir/agent-quota" \
             ./cmd/agent-quota/
 

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 type statusProvider struct {

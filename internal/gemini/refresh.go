@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // resolveGeminiBinary returns the path to the gemini CLI binary.

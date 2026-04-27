@@ -16,7 +16,7 @@ import (
 	"runtime"
 	"strings"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // maxArchiveBytes caps the release archive size to guard against a runaway

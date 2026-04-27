@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/gemini"
+	"github.com/rudolfjs/agent-quota/internal/gemini"
 )
 
 func TestGemini_Available_missingCreds(t *testing.T) {

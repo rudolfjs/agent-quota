@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/gemini"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/gemini"
 )
 
 func TestRefreshToken_missingBinary_returnsAuthError(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/openai"
+	"github.com/rudolfjs/agent-quota/internal/openai"
 )
 
 func TestOpenAI_Available_missingAuth(t *testing.T) {

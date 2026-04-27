@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // Provider fetches quota and usage data from an AI provider.

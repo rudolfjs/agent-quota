@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // TestBodyContent_rawError_doesNotLeakInternals verifies that when a provider

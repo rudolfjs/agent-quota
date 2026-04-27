@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"time"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/version"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/version"
 )
 
 // RefreshToken runs the claude CLI (no args) to trigger an OAuth token refresh,

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/openai"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/openai"
 )
 
 // validOpenAIAuthPayload returns a well-formed auth file payload.

@@ -13,17 +13,17 @@ import (
 	"charm.land/fang/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/schnetlerr/agent-quota/internal/claude"
-	"github.com/schnetlerr/agent-quota/internal/cli"
-	"github.com/schnetlerr/agent-quota/internal/config"
-	"github.com/schnetlerr/agent-quota/internal/copilot"
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/gemini"
-	"github.com/schnetlerr/agent-quota/internal/openai"
-	"github.com/schnetlerr/agent-quota/internal/output"
-	"github.com/schnetlerr/agent-quota/internal/provider"
-	"github.com/schnetlerr/agent-quota/internal/tui"
-	"github.com/schnetlerr/agent-quota/internal/version"
+	"github.com/rudolfjs/agent-quota/internal/claude"
+	"github.com/rudolfjs/agent-quota/internal/cli"
+	"github.com/rudolfjs/agent-quota/internal/config"
+	"github.com/rudolfjs/agent-quota/internal/copilot"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/gemini"
+	"github.com/rudolfjs/agent-quota/internal/openai"
+	"github.com/rudolfjs/agent-quota/internal/output"
+	"github.com/rudolfjs/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/tui"
+	"github.com/rudolfjs/agent-quota/internal/version"
 )
 
 func main() {

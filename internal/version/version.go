@@ -17,8 +17,8 @@ const FallbackClaudeVersion = "unknown"
 
 // Build-time variables. Injected via:
 //
-//	go build -ldflags "-X github.com/schnetlerr/agent-quota/internal/version.buildVersion=v1.2.3 \
-//	                    -X github.com/schnetlerr/agent-quota/internal/version.buildCommit=abc1234"
+//	go build -ldflags "-X github.com/rudolfjs/agent-quota/internal/version.buildVersion=v1.2.3 \
+//	                    -X github.com/rudolfjs/agent-quota/internal/version.buildCommit=abc1234"
 var (
 	buildVersion = "dev"
 	buildCommit  = ""

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/config"
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/config"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 type fakeProvider struct {

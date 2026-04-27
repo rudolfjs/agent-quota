@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // WriteText writes a human-readable summary of results to w.

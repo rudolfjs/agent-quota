@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/copilot"
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/copilot"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 func validCopilotConfigPayload() map[string]any {

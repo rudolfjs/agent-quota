@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/claude"
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/claude"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 func TestRefreshToken_execFailure_returnsAuthError(t *testing.T) {

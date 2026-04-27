@@ -1,4 +1,4 @@
-module github.com/schnetlerr/agent-quota
+module github.com/rudolfjs/agent-quota
 
 go 1.25.0
 

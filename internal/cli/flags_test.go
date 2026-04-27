@@ -3,7 +3,7 @@ package cli_test
 import (
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/cli"
+	"github.com/rudolfjs/agent-quota/internal/cli"
 )
 
 func TestResolveOutputMode(t *testing.T) {

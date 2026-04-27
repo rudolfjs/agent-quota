@@ -3,8 +3,8 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/schnetlerr/agent-quota/internal/selfupdate"
-	"github.com/schnetlerr/agent-quota/internal/version"
+	"github.com/rudolfjs/agent-quota/internal/selfupdate"
+	"github.com/rudolfjs/agent-quota/internal/version"
 )
 
 // NewSelfUpdateCommand returns the "self-update" subcommand, which

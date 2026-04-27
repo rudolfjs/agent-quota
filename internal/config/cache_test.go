@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/config"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/config"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 func TestLoadQuotaCache_missingFileReturnsEmptyResults(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 func TestDomainError_Error_returnsSafeMessage(t *testing.T) {

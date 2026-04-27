@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/fileutil"
 )
 
 // credentialsFile mirrors the structure of ~/.claude/.credentials.json.

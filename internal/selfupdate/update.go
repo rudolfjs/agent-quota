@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // Options tune Run without adding a dozen positional arguments.

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/copilot"
+	"github.com/rudolfjs/agent-quota/internal/copilot"
 )
 
 func TestCopilot_Available_missingConfig(t *testing.T) {

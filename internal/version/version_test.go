@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/version"
+	"github.com/rudolfjs/agent-quota/internal/version"
 )
 
 func TestString_containsVersion(t *testing.T) {

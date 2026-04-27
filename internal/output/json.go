@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // WriteJSON writes one or more QuotaResults as JSON to w.

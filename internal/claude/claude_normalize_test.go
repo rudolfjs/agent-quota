@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/claude"
+	"github.com/rudolfjs/agent-quota/internal/claude"
 )
 
 func TestFetchUsage_normalizesWholeNumberUtilization(t *testing.T) {

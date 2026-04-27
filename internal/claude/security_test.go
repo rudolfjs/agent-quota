@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/claude"
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/claude"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // TestFetchUsage_oversizedResponse_returnsError verifies that the 1 MiB response

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // newTestReleaseServers spins up two httptest servers: one impersonates the

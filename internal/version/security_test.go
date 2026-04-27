@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/version"
+	"github.com/rudolfjs/agent-quota/internal/version"
 )
 
 // TestResolveClaudeBinary_envOverride verifies that AGENT_QUOTA_CLAUDE_PATH

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // fakeProvider is a test double for the Provider interface.

@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/schnetlerr/agent-quota/internal/config"
-	"github.com/schnetlerr/agent-quota/internal/output"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/config"
+	"github.com/rudolfjs/agent-quota/internal/output"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // NewStatusCommand returns the "status" subcommand which prints a JSON

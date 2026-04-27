@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/schnetlerr/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/fileutil"
 )
 
 // TestAtomicWriteFile_writesCorrectContent verifies that AtomicWriteFile

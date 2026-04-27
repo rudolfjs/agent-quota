@@ -11,7 +11,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	"charm.land/lipgloss/v2"
 
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 // RenderProviderCard renders a single provider's QuotaResult as a styled card string.

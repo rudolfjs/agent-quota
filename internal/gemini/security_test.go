@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/gemini"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/gemini"
 )
 
 // validGeminiCredsPayload returns a credential payload with a non-expired token.

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
-	"github.com/schnetlerr/agent-quota/internal/fileutil"
-	"github.com/schnetlerr/agent-quota/internal/provider"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"github.com/rudolfjs/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
 type quotaCacheFile struct {

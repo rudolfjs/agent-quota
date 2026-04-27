@@ -13,7 +13,7 @@ import (
 	"io"
 	"net/http"
 
-	apierrors "github.com/schnetlerr/agent-quota/internal/errors"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
 
 // maxReleaseResponseBytes caps the GitHub API response size. Real responses

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/schnetlerr/agent-quota/internal/claude"
+	"github.com/rudolfjs/agent-quota/internal/claude"
 )
 
 // writeCredFile writes a credentials JSON file to dir/.credentials.json.
