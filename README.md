@@ -109,7 +109,7 @@ Credential entries read by `aq`:
 
 - Claude: service `Claude Code-credentials`; value is the same JSON shape as `~/.claude/.credentials.json`
 - Gemini: service `gemini-cli-oauth`, account `main-account`; value is the Gemini CLI OAuth token record
-- OpenAI Codex: service `Codex Auth`, account `cli|<sha256-prefix-of-CODEX_HOME>`; value is the Codex auth JSON
+- OpenAI Codex: service `Codex Auth`, account `cli|<16 hex chars>` where the suffix is the first 16 hex characters of the SHA-256 digest of the canonical resolved `CODEX_HOME` path; value is the Codex auth JSON
 - Copilot: service `gh:github.com`; value is the GitHub CLI token used by Copilot
 
 ## Development

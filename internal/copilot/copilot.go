@@ -213,9 +213,9 @@ func (c *Copilot) resolveToken(ctx context.Context) (token, host string, err err
 			if token, host, ok := cfg.selectedToken(); ok {
 				return token, host, nil
 			}
+		} else if !errors.Is(fileErr, os.ErrNotExist) {
+			return "", "", fileErr
 		}
-	} else if c.defaultPathErr != nil {
-		return "", "", c.defaultPathErr
 	}
 
 	// Keychain fallback: gh CLI stores tokens in the macOS Keychain on darwin.
@@ -236,6 +236,9 @@ func (c *Copilot) resolveToken(ctx context.Context) (token, host string, err err
 			slog.Debug("copilot keychain read failed", "error", kcErr)
 			return "", "", apierrors.NewConfigError("failed to read Copilot token from Keychain", kcErr)
 		}
+	}
+	if c.defaultPathErr != nil {
+		return "", "", c.defaultPathErr
 	}
 
 	return "", "", errTokenNotConfigured

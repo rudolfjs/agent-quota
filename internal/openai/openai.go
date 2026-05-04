@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -119,6 +120,8 @@ type OpenAI struct {
 	keychainSource   openaiKeychainReader // non-nil on darwin, reads from "Codex Auth" entry
 	keychainAccount  string               // pre-computed Keychain account key for darwin
 	persistOnRefresh bool                 // true when using file source; false on darwin
+	authMu           sync.RWMutex
+	cachedAuth       *authFile
 }
 
 // Option configures an OpenAI provider instance.
@@ -189,6 +192,14 @@ func (o *OpenAI) Name() string { return "openai" }
 
 // readAuth reads auth credentials from the Keychain (darwin) or auth.json file (linux).
 func (o *OpenAI) readAuth(ctx context.Context) (authFile, error) {
+	o.authMu.RLock()
+	if o.cachedAuth != nil {
+		auth := *o.cachedAuth
+		o.authMu.RUnlock()
+		return auth, nil
+	}
+	o.authMu.RUnlock()
+
 	if o.keychainSource != nil {
 		raw, err := o.keychainSource.Read(ctx, "Codex Auth", o.keychainAccount)
 		if err != nil {
@@ -268,6 +279,7 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 			auth.Tokens.IDToken = refreshed.IDToken
 		}
 		auth.LastRefresh = time.Now().UTC().Format(time.RFC3339)
+		o.setCachedAuth(auth)
 
 		// On darwin, Codex CLI owns the Keychain entry — we don't write to it.
 		// The refreshed tokens are held in memory for this process lifetime only.
@@ -284,6 +296,12 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	}
 
 	return convertUsage(usage), nil
+}
+
+func (o *OpenAI) setCachedAuth(auth authFile) {
+	o.authMu.Lock()
+	defer o.authMu.Unlock()
+	o.cachedAuth = &auth
 }
 
 func (o *OpenAI) fetchUsage(ctx context.Context, accessToken string) (*usageResponse, error) {

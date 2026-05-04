@@ -75,3 +75,22 @@ printf '{"access_token":"refreshed"}' > ` + credPath + "\n"
 		t.Errorf("creds after refresh = %q, want refreshed token", got)
 	}
 }
+
+func TestRefreshToken_cliSuccessWithoutCredentialUpdate_returnsAuthError(t *testing.T) {
+	dir := t.TempDir()
+	credPath := filepath.Join(dir, "oauth_creds.json")
+	fakeGemini := filepath.Join(dir, "fake-gemini")
+	if err := os.WriteFile(fakeGemini, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake gemini script: %v", err)
+	}
+	if err := os.WriteFile(credPath, []byte(`{"access_token":"old"}`), 0o600); err != nil {
+		t.Fatalf("write initial creds: %v", err)
+	}
+	t.Setenv("AGENT_QUOTA_GEMINI_PATH", fakeGemini)
+
+	err := gemini.RefreshToken(t.Context(), credPath)
+	var domErr *apierrors.DomainError
+	if !errors.As(err, &domErr) || domErr.Kind != "auth" {
+		t.Fatalf("want auth domain error, got %v", err)
+	}
+}

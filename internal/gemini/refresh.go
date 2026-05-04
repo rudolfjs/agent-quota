@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -55,7 +56,7 @@ func RefreshToken(ctx context.Context, credPath string) error {
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
-			return nil
+			return apierrors.NewAuthError("gemini refresh canceled before credentials update", ctx.Err())
 		case <-ticker.C:
 			info, statErr := os.Stat(credPath)
 			if statErr == nil && info.ModTime().After(oldMtime) {
@@ -64,7 +65,10 @@ func RefreshToken(ctx context.Context, credPath string) error {
 		}
 	}
 
-	return nil
+	return apierrors.NewAuthError(
+		"Gemini CLI completed but credentials were not updated",
+		fmt.Errorf("runGeminiCLI completed without updating credentials file %q", credPath),
+	)
 }
 
 // runGeminiCLI executes the gemini CLI in headless mode to trigger a token refresh.

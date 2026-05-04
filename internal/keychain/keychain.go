@@ -20,8 +20,8 @@ var (
 	ErrUnsupported = errors.New("keychain: unsupported platform")
 )
 
-// Reader reads secrets from the macOS Keychain. The zero value is unusable;
-// always construct via New.
+// Reader reads secrets from the macOS Keychain. The zero value uses the
+// platform default security(1) binary path.
 type Reader struct {
 	// securityPath overrides the path to the security(1) binary. Tests set
 	// this via WithSecurityPath; production resolves "/usr/bin/security".
@@ -37,7 +37,7 @@ func WithSecurityPath(p string) Option {
 	return func(r *Reader) { r.securityPath = p }
 }
 
-// New constructs a Reader. On darwin it resolves the security binary via
+// New constructs a Reader. On darwin, Read resolves the security binary via
 // $AGENT_QUOTA_SECURITY_PATH, falling back to /usr/bin/security.
 func New(opts ...Option) *Reader {
 	r := &Reader{}

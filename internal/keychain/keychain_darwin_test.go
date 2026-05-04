@@ -83,15 +83,14 @@ func TestRead_Darwin_UserCancelled(t *testing.T) {
 }
 
 func TestRead_Darwin_NeverLeaksToken(t *testing.T) {
-	// Even if security somehow embeds the token in stderr, our error must not.
-	fake := writeFakeSecurity(t, "tok-secret\n",
-		"garbage stderr that mentions tok-secret\n", 0)
-	got, err := New(WithSecurityPath(fake)).Read(t.Context(), "x", "y")
-	if err != nil {
-		t.Fatal(err)
+	fake := writeFakeSecurity(t, "",
+		"garbage stderr that mentions tok-secret\n", 99)
+	_, err := New(WithSecurityPath(fake)).Read(t.Context(), "x", "y")
+	if err == nil {
+		t.Fatal("expected error")
 	}
-	if got != "tok-secret" {
-		t.Fatalf("trim mismatch: got %q", got)
+	if strings.Contains(err.Error(), "tok-secret") {
+		t.Fatalf("token leaked in error: %v", err)
 	}
 }
 

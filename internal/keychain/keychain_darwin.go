@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -41,6 +42,9 @@ func (r *Reader) Read(ctx context.Context, service, account string) (string, err
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			return "", classifyExitError(exitErr.ExitCode(), stderr.String())
@@ -69,6 +73,6 @@ func classifyExitError(code int, stderr string) error {
 	default:
 		// Never include raw stderr in the error message — it can contain
 		// service or account names. Surface the exit code only.
-		return errors.New("keychain: security exited with non-zero status")
+		return fmt.Errorf("keychain: security exited with non-zero status: %d", code)
 	}
 }

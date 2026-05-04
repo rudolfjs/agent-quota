@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -91,5 +93,49 @@ func TestCodexKeychainAccount_IsReproducible(t *testing.T) {
 	}
 	if len(a1) != len("cli|")+16 {
 		t.Fatalf("account length = %d, want %d", len(a1), len("cli|")+16)
+	}
+}
+
+func TestKeychainSource_RefreshCachesRotatedTokens(t *testing.T) {
+	var usageCalls int
+	var refreshCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/usage":
+			usageCalls++
+			if r.Header.Get("Authorization") != "Bearer at-new" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"rateLimits":{"credits":{"balance":"10","hasCredits":true}}}`))
+		case "/token":
+			refreshCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"at-new","refresh_token":"rt-new"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	o := New(
+		WithKeychainReader(fakeKeychainReader{payload: validAuthJSON(t)}, "cli|test16chars1"),
+		WithHTTPClient(srv.Client()),
+		WithUsageURL(srv.URL+"/usage"),
+		WithTokenURL(srv.URL+"/token"),
+	)
+
+	if _, err := o.FetchQuota(t.Context()); err != nil {
+		t.Fatalf("first FetchQuota: %v", err)
+	}
+	if _, err := o.FetchQuota(t.Context()); err != nil {
+		t.Fatalf("second FetchQuota: %v", err)
+	}
+	if refreshCalls != 1 {
+		t.Fatalf("refresh calls = %d, want 1", refreshCalls)
+	}
+	if usageCalls != 3 {
+		t.Fatalf("usage calls = %d, want 3", usageCalls)
 	}
 }
