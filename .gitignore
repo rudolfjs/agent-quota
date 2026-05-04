@@ -34,3 +34,4 @@ go.work.sum
 
 # Claude Code worktrees
 .claude/worktree
+.worktrees/
