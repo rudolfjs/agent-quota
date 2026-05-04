@@ -170,8 +170,8 @@ func extractBinary(archivePath, dest string) error {
 }
 
 // swapBinary atomically replaces dst with the file at src via rename(2).
-// On Linux this is safe even while the current binary is executing — the
-// kernel keeps the original inode resident until all file descriptors /
+// On Linux and macOS this is safe even while the current binary is executing —
+// the kernel keeps the original inode resident until all file descriptors /
 // running processes release it. The new binary takes effect on the next
 // invocation.
 func swapBinary(src, dst string) error {
