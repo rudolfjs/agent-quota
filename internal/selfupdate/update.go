@@ -65,6 +65,21 @@ type Result struct {
 
 const defaultOwnerRepo = "rudolfjs/agent-quota"
 
+// supportedSelfUpdateTargets lists OS/arch combinations for which release
+// archives are published. Expand this when new targets are added to the CI
+// release matrix.
+var supportedSelfUpdateTargets = map[string]bool{
+	"linux/amd64":  true,
+	"darwin/amd64": true,
+	"darwin/arm64": true,
+}
+
+// selfUpdateSupported reports whether the running OS/arch has a published
+// release archive that self-update can download.
+func selfUpdateSupported() bool {
+	return supportedSelfUpdateTargets[runtime.GOOS+"/"+runtime.GOARCH]
+}
+
 // Run executes the self-update pipeline end-to-end.
 //
 // Flow:
@@ -75,9 +90,9 @@ const defaultOwnerRepo = "rudolfjs/agent-quota"
 //  5. Extract the binary into a staging dir.
 //  6. Atomically swap it into the current executable's path.
 func Run(ctx context.Context, opts Options) (*Result, error) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+	if !selfUpdateSupported() {
 		return nil, apierrors.NewConfigError(
-			fmt.Sprintf("self-update only supports linux/amd64 today, not %s/%s", runtime.GOOS, runtime.GOARCH),
+			fmt.Sprintf("self-update is not supported on %s/%s", runtime.GOOS, runtime.GOARCH),
 			errors.New("unsupported platform"),
 		)
 	}

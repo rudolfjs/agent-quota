@@ -7,7 +7,7 @@ versionFormat: '## {{.Version}} - {{.Time.Format "2006-01-02"}}'
 kindFormat: '### {{.Kind}}'
 changeFormat: '* {{.Body}}'
 footerFormat: |
-    > Update with `aq self-update` on Linux/amd64.
+    > Update with `aq self-update` on Linux/amd64, macOS Intel, and macOS Apple Silicon.
 kinds:
     - label: Added
       auto: minor

@@ -11,13 +11,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/keychain"
 	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
@@ -100,20 +103,35 @@ type refreshResponse struct {
 	TokenType    string `json:"token_type,omitempty"`
 }
 
+// openaiKeychainReader is the minimal interface OpenAI needs for Keychain access.
+// Defined here (not in package keychain) to avoid import cycles and keep faking simple.
+type openaiKeychainReader interface {
+	Read(ctx context.Context, service, account string) (string, error)
+}
+
 // OpenAI implements provider.Provider for ChatGPT/Codex OAuth quota data.
 type OpenAI struct {
-	authPath       string
-	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
-	httpClient     *http.Client
-	usageURL       string
-	tokenURL       string
+	authPath         string
+	authPathSet      bool
+	defaultPathErr   error // non-nil when home dir lookup failed and no explicit path was given
+	httpClient       *http.Client
+	usageURL         string
+	tokenURL         string
+	keychainSource   openaiKeychainReader // non-nil on darwin, reads from "Codex Auth" entry
+	keychainAccount  string               // pre-computed Keychain account key for darwin
+	persistOnRefresh bool                 // true when using file source; false on darwin
+	authMu           sync.RWMutex
+	cachedAuth       *authFile
 }
 
 // Option configures an OpenAI provider instance.
 type Option func(*OpenAI)
 
 func WithAuthPath(path string) Option {
-	return func(o *OpenAI) { o.authPath = path }
+	return func(o *OpenAI) {
+		o.authPath = path
+		o.authPathSet = true
+	}
 }
 
 func WithHTTPClient(client *http.Client) Option {
@@ -128,15 +146,26 @@ func WithTokenURL(url string) Option {
 	return func(o *OpenAI) { o.tokenURL = url }
 }
 
+// WithKeychainReader injects a custom Keychain reader for testing the darwin
+// code path without a real Keychain.
+func WithKeychainReader(r openaiKeychainReader, account string) Option {
+	return func(o *OpenAI) {
+		o.keychainSource = r
+		o.keychainAccount = account
+		o.persistOnRefresh = false
+	}
+}
+
 // defaultHTTPClient is the HTTP client used when none is provided via WithHTTPClient.
 // A 30-second timeout prevents hung API servers from blocking the process indefinitely.
 var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 func New(opts ...Option) *OpenAI {
 	o := &OpenAI{
-		httpClient: defaultHTTPClient,
-		usageURL:   defaultUsageURL,
-		tokenURL:   defaultTokenURL,
+		httpClient:       defaultHTTPClient,
+		usageURL:         defaultUsageURL,
+		tokenURL:         defaultTokenURL,
+		persistOnRefresh: true, // default: persist refreshed tokens to disk
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -147,16 +176,66 @@ func New(opts ...Option) *OpenAI {
 		o.authPath = path
 		o.defaultPathErr = err
 	}
+	// On darwin, use Keychain as the credential source unless a file path was explicit.
+	if runtime.GOOS == "darwin" && o.keychainSource == nil && !o.authPathSet {
+		account, err := codexKeychainAccount()
+		if err == nil {
+			o.keychainSource = keychain.New()
+			o.keychainAccount = account
+			o.persistOnRefresh = false // Codex CLI owns the Keychain entry; we don't write to it
+		}
+	}
 	return o
 }
 
 func (o *OpenAI) Name() string { return "openai" }
 
-func (o *OpenAI) Available() bool {
-	if o.defaultPathErr != nil {
-		return false
+// readAuth reads auth credentials from the Keychain (darwin) or auth.json file (linux).
+func (o *OpenAI) readAuth(ctx context.Context) (authFile, error) {
+	o.authMu.RLock()
+	if o.cachedAuth != nil {
+		auth := *o.cachedAuth
+		o.authMu.RUnlock()
+		return auth, nil
+	}
+	o.authMu.RUnlock()
+
+	if o.keychainSource != nil {
+		raw, err := o.keychainSource.Read(ctx, "Codex Auth", o.keychainAccount)
+		if err != nil {
+			switch {
+			case errors.Is(err, keychain.ErrNotFound):
+				return authFile{}, apierrors.NewAuthError(
+					"Codex is not signed in on this machine; run `codex login` to authenticate",
+					err,
+				)
+			case errors.Is(err, keychain.ErrAccessDenied):
+				return authFile{}, apierrors.NewAuthError(
+					`Keychain access denied; grant access to the "Codex Auth" entry and retry`,
+					err,
+				)
+			default:
+				return authFile{}, apierrors.NewConfigError("failed to read Codex credentials from Keychain", err)
+			}
+		}
+		var auth authFile
+		if err := json.Unmarshal([]byte(raw), &auth); err != nil {
+			return authFile{}, apierrors.NewConfigError("failed to parse Codex credentials from Keychain", err)
+		}
+		return auth, nil
 	}
 	auth, err := readAuthFile(o.authPath)
+	if err != nil {
+		return authFile{}, apierrors.NewConfigError("failed to read OpenAI auth", err)
+	}
+	return auth, nil
+}
+
+func (o *OpenAI) Available() bool {
+	if o.keychainSource == nil && o.defaultPathErr != nil {
+		return false
+	}
+	auth, err := o.readAuth(context.Background())
 	if err != nil {
 		return false
 	}
@@ -164,12 +243,12 @@ func (o *OpenAI) Available() bool {
 }
 
 func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
-	if o.defaultPathErr != nil {
+	if o.keychainSource == nil && o.defaultPathErr != nil {
 		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine OpenAI auth path", o.defaultPathErr)
 	}
-	auth, err := readAuthFile(o.authPath)
+	auth, err := o.readAuth(ctx)
 	if err != nil {
-		return provider.QuotaResult{}, apierrors.NewConfigError("failed to read OpenAI auth", err)
+		return provider.QuotaResult{}, err
 	}
 	if auth.Tokens.AccessToken == "" {
 		return provider.QuotaResult{}, apierrors.NewAuthError("OpenAI authentication is not configured", fmt.Errorf("missing access token"))
@@ -200,8 +279,14 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 			auth.Tokens.IDToken = refreshed.IDToken
 		}
 		auth.LastRefresh = time.Now().UTC().Format(time.RFC3339)
-		if writeErr := writeAuthFile(o.authPath, auth); writeErr != nil {
-			return provider.QuotaResult{}, apierrors.NewConfigError("failed to persist refreshed OpenAI auth", writeErr)
+		o.setCachedAuth(auth)
+
+		// On darwin, Codex CLI owns the Keychain entry — we don't write to it.
+		// The refreshed tokens are held in memory for this process lifetime only.
+		if o.persistOnRefresh {
+			if writeErr := writeAuthFile(o.authPath, auth); writeErr != nil {
+				return provider.QuotaResult{}, apierrors.NewConfigError("failed to persist refreshed OpenAI auth", writeErr)
+			}
 		}
 
 		usage, err = o.fetchUsage(ctx, auth.Tokens.AccessToken)
@@ -211,6 +296,12 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	}
 
 	return convertUsage(usage), nil
+}
+
+func (o *OpenAI) setCachedAuth(auth authFile) {
+	o.authMu.Lock()
+	defer o.authMu.Unlock()
+	o.cachedAuth = &auth
 }
 
 func (o *OpenAI) fetchUsage(ctx context.Context, accessToken string) (*usageResponse, error) {

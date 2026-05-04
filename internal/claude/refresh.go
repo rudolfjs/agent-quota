@@ -21,15 +21,8 @@ func RefreshToken(ctx context.Context, credPath string) error {
 		oldMtime = info.ModTime()
 	}
 
-	claudePath, err := version.ResolveClaudeBinary()
-	if err != nil {
-		return apierrors.NewAuthError("claude CLI not found; cannot refresh token", err)
-	}
-	cmd := exec.CommandContext(ctx, claudePath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		slog.Debug("claude CLI exec failed", "error", err, "output_bytes", len(out))
-		return apierrors.NewAuthError("failed to refresh Claude token", err)
+	if err := runClaudeCLI(ctx); err != nil {
+		return err
 	}
 
 	// Wait up to 3s for the credentials file mtime to change.
@@ -48,5 +41,21 @@ func RefreshToken(ctx context.Context, credPath string) error {
 		}
 	}
 
+	return nil
+}
+
+// runClaudeCLI executes the claude CLI with no arguments to trigger a token refresh.
+// The CLI handles writing the refreshed token (to disk or Keychain depending on platform).
+func runClaudeCLI(ctx context.Context) error {
+	claudePath, err := version.ResolveClaudeBinary()
+	if err != nil {
+		return apierrors.NewAuthError("claude CLI not found; cannot refresh token", err)
+	}
+	cmd := exec.CommandContext(ctx, claudePath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Debug("claude CLI exec failed", "error", err, "output_bytes", len(out))
+		return apierrors.NewAuthError("failed to refresh Claude token", err)
+	}
 	return nil
 }

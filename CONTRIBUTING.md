@@ -121,7 +121,7 @@ The release pipeline (`.github/workflows/release.yml`) will:
 3. Auto-batch unreleased changie fragments into `.changes/<version>.md` and update `CHANGELOG.md`
 4. Commit the changelog updates directly to `main` (via GitHub App token with ruleset bypass)
 5. Move the tag to include the changelog commit
-6. Build linux/amd64 binary with version injection
+6. Build Linux x86_64, macOS Intel, and macOS Apple Silicon binaries with version injection
 7. Publish the GitHub Release with changie notes, artifacts, checksums, and `install.sh`
 
 > If `.changes/<version>.md` already exists (manual batch), the pipeline skips steps 3–5 and uses the existing notes.

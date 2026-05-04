@@ -103,8 +103,8 @@ func buildTarGzArchive(t *testing.T, marker []byte) []byte {
 }
 
 func TestRun_installsLatestRelease(t *testing.T) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	if !selfUpdateSupported() {
+		t.Skipf("self-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	marker := []byte("AGENT_QUOTA_FAKE_BINARY_v0.3.0\n")
@@ -156,8 +156,8 @@ func TestRun_installsLatestRelease(t *testing.T) {
 // creation, so the installed binary must be explicitly chmod'd to stay
 // executable after the atomic rename.
 func TestRun_installedBinaryIsExecutable(t *testing.T) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	if !selfUpdateSupported() {
+		t.Skipf("self-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	archive := buildTarGzArchive(t, []byte("new-binary-payload"))
@@ -193,8 +193,8 @@ func TestRun_installedBinaryIsExecutable(t *testing.T) {
 }
 
 func TestRun_noUpdateWhenAlreadyOnLatest(t *testing.T) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	if !selfUpdateSupported() {
+		t.Skipf("self-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	archive := buildTarGzArchive(t, []byte("marker"))
@@ -230,8 +230,8 @@ func TestRun_noUpdateWhenAlreadyOnLatest(t *testing.T) {
 }
 
 func TestRun_checkOnlySkipsInstall(t *testing.T) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	if !selfUpdateSupported() {
+		t.Skipf("self-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	archive := buildTarGzArchive(t, []byte("new"))
@@ -271,8 +271,8 @@ func TestRun_checkOnlySkipsInstall(t *testing.T) {
 }
 
 func TestRun_checksumMismatchAbortsInstall(t *testing.T) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skipf("self-update is linux/amd64 only; skipping on %s/%s", runtime.GOOS, runtime.GOARCH)
+	if !selfUpdateSupported() {
+		t.Skipf("self-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	archive := buildTarGzArchive(t, []byte("good"))

@@ -10,12 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/keychain"
 	"github.com/rudolfjs/agent-quota/internal/provider"
 )
 
@@ -60,12 +62,19 @@ type quotaSnapshot struct {
 	Unlimited        bool    `json:"unlimited,omitempty"`
 }
 
+// keychainReader is the minimal interface Copilot needs to read from the macOS
+// Keychain. Defined here (not in package keychain) to avoid import cycles.
+type keychainReader interface {
+	Read(ctx context.Context, service, account string) (string, error)
+}
+
 // Copilot implements provider.Provider for GitHub Copilot CLI quota data.
 type Copilot struct {
-	configPath     string
-	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
-	httpClient     *http.Client
-	baseURL        string
+	configPath       string
+	defaultPathErr   error // non-nil when home dir lookup failed and no explicit path was given
+	httpClient       *http.Client
+	baseURL          string
+	keychainFallback keychainReader // non-nil on darwin when no file source found
 }
 
 // Option configures a Copilot provider instance.
@@ -73,6 +82,12 @@ type Option func(*Copilot)
 
 func WithConfigPath(path string) Option {
 	return func(c *Copilot) { c.configPath = path }
+}
+
+// WithKeychainFallback injects a custom keychainReader. Used by tests to
+// exercise the darwin code path without a real Keychain.
+func WithKeychainFallback(r keychainReader) Option {
+	return func(c *Copilot) { c.keychainFallback = r }
 }
 
 func WithHTTPClient(client *http.Client) Option {
@@ -100,20 +115,26 @@ func New(opts ...Option) *Copilot {
 		c.configPath = path
 		c.defaultPathErr = err
 	}
+	if c.keychainFallback == nil && runtime.GOOS == "darwin" {
+		c.keychainFallback = keychain.New()
+	}
 	return c
 }
 
 func (c *Copilot) Name() string { return "copilot" }
 
 func (c *Copilot) Available() bool {
-	_, _, err := c.resolveToken()
+	_, _, err := c.resolveToken(context.Background())
 	return err == nil
 }
 
 func (c *Copilot) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
-	token, host, err := c.resolveToken()
+	token, host, err := c.resolveToken(ctx)
 	if err != nil {
+		var domErr *apierrors.DomainError
 		switch {
+		case errors.As(err, &domErr):
+			return provider.QuotaResult{}, err
 		case errors.Is(err, errTokenNotConfigured):
 			slog.Debug("copilot token not configured", "error", err)
 			return provider.QuotaResult{}, apierrors.NewAuthError("Copilot authentication is not configured", err)
@@ -179,27 +200,47 @@ func (c *Copilot) fetchUser(ctx context.Context, baseURL, token string) (*userRe
 	return &usage, nil
 }
 
-func (c *Copilot) resolveToken() (token, host string, err error) {
+func (c *Copilot) resolveToken(ctx context.Context) (token, host string, err error) {
 	for _, name := range []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			return value, "", nil
 		}
 	}
 
-	if c.configPath == "" {
-		if c.defaultPathErr != nil {
-			return "", "", c.defaultPathErr
+	if c.configPath != "" {
+		cfg, fileErr := readConfig(c.configPath)
+		if fileErr == nil {
+			if token, host, ok := cfg.selectedToken(); ok {
+				return token, host, nil
+			}
+		} else if !errors.Is(fileErr, os.ErrNotExist) {
+			return "", "", fileErr
 		}
-		return "", "", fmt.Errorf("empty Copilot config path")
 	}
 
-	cfg, err := readConfig(c.configPath)
-	if err != nil {
-		return "", "", err
+	// Keychain fallback: gh CLI stores tokens in the macOS Keychain on darwin.
+	// Service "gh:github.com"; account="" returns the first (most common case).
+	if c.keychainFallback != nil {
+		tok, kcErr := c.keychainFallback.Read(ctx, "gh:github.com", "")
+		if kcErr == nil && strings.TrimSpace(tok) != "" {
+			return tok, "github.com", nil
+		}
+		switch {
+		case errors.Is(kcErr, keychain.ErrAccessDenied):
+			return "", "", apierrors.NewAuthError(
+				`Keychain access denied; grant access to the "gh:github.com" entry and retry`,
+				kcErr,
+			)
+		case kcErr != nil && !errors.Is(kcErr, keychain.ErrNotFound) &&
+			!errors.Is(kcErr, keychain.ErrUnsupported):
+			slog.Debug("copilot keychain read failed", "error", kcErr)
+			return "", "", apierrors.NewConfigError("failed to read Copilot token from Keychain", kcErr)
+		}
 	}
-	if token, host, ok := cfg.selectedToken(); ok {
-		return token, host, nil
+	if c.defaultPathErr != nil {
+		return "", "", c.defaultPathErr
 	}
+
 	return "", "", errTokenNotConfigured
 }
 

@@ -27,7 +27,7 @@ Flags:
   --force   reinstall even if the current version matches the latest release
   --pre     consider prerelease tags (default: stable only)
 
-Only linux/amd64 is supported today.`,
+Supported release targets: linux/amd64, darwin/amd64, and darwin/arm64.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := selfupdate.Run(cmd.Context(), selfupdate.Options{
 				CurrentVersion:  extractVersionCore(version.String()),

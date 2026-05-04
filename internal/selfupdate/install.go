@@ -25,7 +25,7 @@ const maxArchiveBytes = 128 << 20 // 128 MiB
 
 // assetNames derives the expected archive and checksum filenames for a
 // given release tag and runtime target. Matches the layout produced by
-// goreleaser in this repo (see scripts/install.sh:203-204).
+// the release workflow in this repo.
 func assetNames(tag string) (archive, checksums string) {
 	version := strings.TrimPrefix(tag, "v")
 	archive = fmt.Sprintf("agent-quota_%s_%s_%s.tar.gz", version, runtime.GOOS, runtime.GOARCH)
@@ -170,8 +170,8 @@ func extractBinary(archivePath, dest string) error {
 }
 
 // swapBinary atomically replaces dst with the file at src via rename(2).
-// On Linux this is safe even while the current binary is executing — the
-// kernel keeps the original inode resident until all file descriptors /
+// On Linux and macOS this is safe even while the current binary is executing —
+// the kernel keeps the original inode resident until all file descriptors /
 // running processes release it. The new binary takes effect on the next
 // invocation.
 func swapBinary(src, dst string) error {

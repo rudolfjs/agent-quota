@@ -1,13 +1,39 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/fileutil"
 )
+
+// credentialSource abstracts where Claude OAuth credentials live.
+// Two concrete implementations: fileSource (Linux/default) and keychainSource (darwin).
+type credentialSource interface {
+	Read(ctx context.Context) (*OAuthCredentials, error)
+	Refresh(ctx context.Context) error
+}
+
+// fileSource reads credentials from ~/.claude/.credentials.json.
+type fileSource struct {
+	path string
+}
+
+func (f fileSource) Read(_ context.Context) (*OAuthCredentials, error) {
+	creds, err := ReadCredentials(f.path)
+	if err != nil {
+		return nil, apierrors.NewConfigError("failed to read Claude credentials", err)
+	}
+	return &creds, nil
+}
+
+func (f fileSource) Refresh(ctx context.Context) error {
+	return RefreshToken(ctx, f.path)
+}
 
 // credentialsFile mirrors the structure of ~/.claude/.credentials.json.
 type credentialsFile struct {

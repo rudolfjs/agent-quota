@@ -74,14 +74,23 @@ download() {
 detect_os() {
   case $(uname -s) in
     Linux)  echo linux ;;
-    *)      fail "unsupported operating system: $(uname -s) (Linux x86_64 only)" ;;
+    Darwin) echo darwin ;;
+    *)      fail "unsupported operating system: $(uname -s) (Linux and macOS supported; on Windows use WSL2)" ;;
   esac
 }
 
 detect_arch() {
   case $(uname -m) in
     x86_64|amd64)   echo amd64 ;;
-    *)              fail "unsupported architecture: $(uname -m) (Linux x86_64 only)" ;;
+    arm64|aarch64)  echo arm64 ;;
+    *)              fail "unsupported architecture: $(uname -m)" ;;
+  esac
+}
+
+validate_target() {
+  case "$1/$2" in
+    linux/amd64|darwin/amd64|darwin/arm64) ;;
+    *) fail "unsupported platform: $(pretty_os "$1") / $(pretty_arch "$2") (supported: Linux x86_64, macOS Intel, macOS Apple Silicon; on Windows use WSL2)" ;;
   esac
 }
 
@@ -96,6 +105,7 @@ pretty_os() {
 pretty_arch() {
   case $1 in
     amd64) printf "x86_64 (Intel/AMD)" ;;
+    arm64) printf "arm64 (Apple Silicon/aarch64)" ;;
     *)     printf "%s" "$1" ;;
   esac
 }
@@ -178,6 +188,7 @@ main() {
   info "detecting platform..."
   os=$(detect_os)
   arch=$(detect_arch)
+  validate_target "$os" "$arch"
   ok "$(pretty_os "$os") / $(pretty_arch "$arch")"
 
   # Resolve version
