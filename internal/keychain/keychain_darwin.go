@@ -29,12 +29,12 @@ func (r *Reader) Read(ctx context.Context, service, account string) (string, err
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, bin,
-		"find-generic-password",
-		"-s", service,
-		"-a", account,
-		"-w",
-	)
+	args := []string{"find-generic-password", "-s", service}
+	if account != "" {
+		args = append(args, "-a", account)
+	}
+	args = append(args, "-w")
+	cmd := exec.CommandContext(ctx, bin, args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
