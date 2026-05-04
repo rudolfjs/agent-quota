@@ -1,0 +1,2 @@
+kind: Added
+body: New `aq self-update` — atomic updates with sha256 verification (Linux/amd64)

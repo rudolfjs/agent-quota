@@ -1,0 +1,2 @@
+kind: Added
+body: "New `gemini` provider tracks Gemini Code Assist daily quotas via the `gemini` CLI's OAuth credentials"

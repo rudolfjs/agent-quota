@@ -1,0 +1,2 @@
+kind: Added
+body: New `agent-quota` CLI tracks AI provider OAuth subscription quotas — pretty TUI for humans, headless JSON for scripts and agents

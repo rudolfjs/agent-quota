@@ -1,0 +1,2 @@
+kind: Added
+body: New `claude` provider tracks Claude Code subscription quotas — 5-hour, weekly, and weekly-Sonnet windows
