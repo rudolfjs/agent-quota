@@ -111,6 +111,7 @@ type openaiKeychainReader interface {
 // OpenAI implements provider.Provider for ChatGPT/Codex OAuth quota data.
 type OpenAI struct {
 	authPath         string
+	authPathSet      bool
 	defaultPathErr   error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient       *http.Client
 	usageURL         string
@@ -124,7 +125,10 @@ type OpenAI struct {
 type Option func(*OpenAI)
 
 func WithAuthPath(path string) Option {
-	return func(o *OpenAI) { o.authPath = path }
+	return func(o *OpenAI) {
+		o.authPath = path
+		o.authPathSet = true
+	}
 }
 
 func WithHTTPClient(client *http.Client) Option {
@@ -145,6 +149,7 @@ func WithKeychainReader(r openaiKeychainReader, account string) Option {
 	return func(o *OpenAI) {
 		o.keychainSource = r
 		o.keychainAccount = account
+		o.persistOnRefresh = false
 	}
 }
 
@@ -168,8 +173,8 @@ func New(opts ...Option) *OpenAI {
 		o.authPath = path
 		o.defaultPathErr = err
 	}
-	// On darwin, use Keychain as the credential source when no explicit reader was injected.
-	if runtime.GOOS == "darwin" && o.keychainSource == nil {
+	// On darwin, use Keychain as the credential source unless a file path was explicit.
+	if runtime.GOOS == "darwin" && o.keychainSource == nil && !o.authPathSet {
 		account, err := codexKeychainAccount()
 		if err == nil {
 			o.keychainSource = keychain.New()

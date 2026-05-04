@@ -44,12 +44,16 @@ install-deps:
 ci: release-check
 
 local-install: build
-	@if [ "$$(uname -s)" != "Linux" ]; then \
-		echo "local-install is supported on Linux x86_64 only; build manually on other platforms if you want to experiment" >&2; \
+	@if [ "$$(uname -s)" != "Linux" ] && [ "$$(uname -s)" != "Darwin" ]; then \
+		echo "local-install is supported on Linux x86_64, macOS Intel, and macOS Apple Silicon" >&2; \
 		exit 1; \
 	fi
-	@if [ "$$(uname -m)" != "x86_64" ] && [ "$$(uname -m)" != "amd64" ]; then \
-		echo "local-install is supported on Linux x86_64 only; build manually on other platforms if you want to experiment" >&2; \
+	@if [ "$$(uname -s)" = "Linux" ] && [ "$$(uname -m)" != "x86_64" ] && [ "$$(uname -m)" != "amd64" ]; then \
+		echo "local-install is supported on Linux x86_64 only for Linux hosts" >&2; \
+		exit 1; \
+	fi
+	@if [ "$$(uname -s)" = "Darwin" ] && [ "$$(uname -m)" != "x86_64" ] && [ "$$(uname -m)" != "amd64" ] && [ "$$(uname -m)" != "arm64" ] && [ "$$(uname -m)" != "aarch64" ]; then \
+		echo "local-install is supported on macOS Intel and macOS Apple Silicon" >&2; \
 		exit 1; \
 	fi
 	install -m 0755 $(BINARY) $$HOME/.local/bin/$(BINARY)

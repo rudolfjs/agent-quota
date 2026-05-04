@@ -10,9 +10,6 @@ import (
 
 // codexKeychainAccount computes the Keychain account key used by the Codex CLI.
 // Codex uses: "cli|" + first 16 hex chars of SHA-256(canonical_codex_home_path).
-//
-// TODO(macos-verify): confirm account format against codex-rs/login/src/auth/storage.rs
-// KEYRING_SERVICE = "Codex Auth", key = "cli|{sha256_truncated_16}"
 func codexKeychainAccount() (string, error) {
 	home := os.Getenv("CODEX_HOME")
 	if home == "" {

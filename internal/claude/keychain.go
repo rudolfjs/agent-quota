@@ -9,7 +9,6 @@ import (
 	"github.com/rudolfjs/agent-quota/internal/keychain"
 )
 
-// TODO(macos-verify): confirm service name against real macOS Claude Code install.
 const claudeKeychainService = "Claude Code-credentials"
 
 // keychainReader is the minimal interface keychainSource needs.

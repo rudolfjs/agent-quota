@@ -47,8 +47,15 @@ jobs:
       - name: Run tests
         run: go test -race -count=1 ./...
 
-      - name: Build CLI
-        run: go build -o /tmp/agent-quota ./cmd/agent-quota/
+      - name: Build supported release targets
+        run: |
+          set -eu
+          for target in linux/amd64 darwin/amd64 darwin/arm64; do
+            goos=${target%/*}
+            goarch=${target#*/}
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -o "/tmp/agent-quota-${goos}-${goarch}" ./cmd/agent-quota/
+          done
 
       - name: Verify installer script is executable
         run: test -x scripts/install.sh

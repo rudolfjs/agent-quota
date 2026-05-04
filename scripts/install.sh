@@ -87,6 +87,13 @@ detect_arch() {
   esac
 }
 
+validate_target() {
+  case "$1/$2" in
+    linux/amd64|darwin/amd64|darwin/arm64) ;;
+    *) fail "unsupported platform: $(pretty_os "$1") / $(pretty_arch "$2") (supported: Linux x86_64, macOS Intel, macOS Apple Silicon; on Windows use WSL2)" ;;
+  esac
+}
+
 pretty_os() {
   case $1 in
     darwin) printf "macOS" ;;
@@ -98,7 +105,7 @@ pretty_os() {
 pretty_arch() {
   case $1 in
     amd64) printf "x86_64 (Intel/AMD)" ;;
-    arm64) printf "arm64 (Apple Silicon)" ;;
+    arm64) printf "arm64 (Apple Silicon/aarch64)" ;;
     *)     printf "%s" "$1" ;;
   esac
 }
@@ -181,6 +188,7 @@ main() {
   info "detecting platform..."
   os=$(detect_os)
   arch=$(detect_arch)
+  validate_target "$os" "$arch"
   ok "$(pretty_os "$os") / $(pretty_arch "$arch")"
 
   # Resolve version

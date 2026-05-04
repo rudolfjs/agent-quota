@@ -6,8 +6,8 @@ Pretty TUI for humans, headless JSON for scripts and agents.
 
 > **Not for API usage.** This tool reads the OAuth-based subscription quotas exposed by provider CLIs, not API key billing. If you pay per-token via the API, this isn't the tool for you.
 
-> Linux x86_64 only for now.
-> The supported install paths in this repo target Linux x86_64 only. Manual `go build` / `go install` may still work on other platforms, but that is unsupported.
+> Supported platforms: Linux x86_64, macOS Intel, and macOS Apple Silicon.
+> Windows users should run `aq` under WSL2; PowerShell is unsupported because the provider CLIs and credential stores are not consistent there.
 
 ## Quick View Example
 
@@ -20,11 +20,11 @@ Pretty TUI for humans, headless JSON for scripts and agents.
 ### Prebuilt binary
 
 The standard release path is:
-- GitHub Actions builds Linux x86_64 binaries on tagged releases
+- GitHub Actions builds Linux x86_64, macOS Intel, and macOS Apple Silicon binaries on tagged releases
 - GitHub Releases hosts the archives and checksums
-- `install.sh` downloads the correct archive for Linux x86_64
+- `install.sh` downloads the correct archive for your supported platform
 
-Install the latest Linux x86_64 release into `~/.local/bin`:
+Install the latest release into `~/.local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
@@ -35,7 +35,7 @@ Custom installation instructions:
 ```bash
 # /usr/local/bin
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
-# Install a specific Linux x86_64 release version:
+# Install a specific release version:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
 # Skip the confirmation prompt:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | YES=1 sh
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/i
 
 ### Install with Go or build from source
 
-This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
+Source builds are supported on Linux x86_64, macOS Intel, and macOS Apple Silicon.
 
 ```bash
 # Go
@@ -100,6 +100,17 @@ TUI settings example:
 - OpenAI: `codex login`
 - Gemini: `gemini` CLI login
 - Copilot: `copilot login`
+
+### macOS Keychain
+
+On macOS, provider CLIs store OAuth credentials in the system Keychain. The first `aq` read for a provider can show a prompt such as `agent-quota wants to access ... in your keychain`; choose **Always Allow** so future quota checks can run unattended.
+
+Credential entries read by `aq`:
+
+- Claude: service `Claude Code-credentials`; value is the same JSON shape as `~/.claude/.credentials.json`
+- Gemini: service `gemini-cli-oauth`, account `main-account`; value is the Gemini CLI OAuth token record
+- OpenAI Codex: service `Codex Auth`, account `cli|<sha256-prefix-of-CODEX_HOME>`; value is the Codex auth JSON
+- Copilot: service `gh:github.com`; value is the GitHub CLI token used by Copilot
 
 ## Development
 

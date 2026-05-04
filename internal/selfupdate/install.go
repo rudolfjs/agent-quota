@@ -25,7 +25,7 @@ const maxArchiveBytes = 128 << 20 // 128 MiB
 
 // assetNames derives the expected archive and checksum filenames for a
 // given release tag and runtime target. Matches the layout produced by
-// goreleaser in this repo (see scripts/install.sh:203-204).
+// the release workflow in this repo.
 func assetNames(tag string) (archive, checksums string) {
 	version := strings.TrimPrefix(tag, "v")
 	archive = fmt.Sprintf("agent-quota_%s_%s_%s.tar.gz", version, runtime.GOOS, runtime.GOARCH)

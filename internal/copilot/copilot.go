@@ -131,7 +131,10 @@ func (c *Copilot) Available() bool {
 func (c *Copilot) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	token, host, err := c.resolveToken(ctx)
 	if err != nil {
+		var domErr *apierrors.DomainError
 		switch {
+		case errors.As(err, &domErr):
+			return provider.QuotaResult{}, err
 		case errors.Is(err, errTokenNotConfigured):
 			slog.Debug("copilot token not configured", "error", err)
 			return provider.QuotaResult{}, apierrors.NewAuthError("Copilot authentication is not configured", err)
@@ -222,9 +225,16 @@ func (c *Copilot) resolveToken(ctx context.Context) (token, host string, err err
 		if kcErr == nil && strings.TrimSpace(tok) != "" {
 			return tok, "github.com", nil
 		}
-		if kcErr != nil && !errors.Is(kcErr, keychain.ErrNotFound) &&
-			!errors.Is(kcErr, keychain.ErrUnsupported) {
+		switch {
+		case errors.Is(kcErr, keychain.ErrAccessDenied):
+			return "", "", apierrors.NewAuthError(
+				`Keychain access denied; grant access to the "gh:github.com" entry and retry`,
+				kcErr,
+			)
+		case kcErr != nil && !errors.Is(kcErr, keychain.ErrNotFound) &&
+			!errors.Is(kcErr, keychain.ErrUnsupported):
 			slog.Debug("copilot keychain read failed", "error", kcErr)
+			return "", "", apierrors.NewConfigError("failed to read Copilot token from Keychain", kcErr)
 		}
 	}
 

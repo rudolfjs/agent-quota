@@ -2,12 +2,14 @@ package copilot_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
 	"github.com/rudolfjs/agent-quota/internal/copilot"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/keychain"
 )
 
@@ -46,6 +48,22 @@ func TestCopilot_Available_keychainFallback_NotFound(t *testing.T) {
 	)
 	if p.Available() {
 		t.Fatal("Available() = true, want false when keychain returns ErrNotFound")
+	}
+}
+
+func TestCopilot_FetchQuota_keychainFallback_AccessDenied(t *testing.T) {
+	t.Setenv("COPILOT_GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	p := copilot.New(
+		copilot.WithConfigPath(filepath.Join(t.TempDir(), "config.json")),
+		copilot.WithKeychainFallback(fakeKeychain{err: keychain.ErrAccessDenied}),
+	)
+	_, err := p.FetchQuota(t.Context())
+	var de *apierrors.DomainError
+	if !errors.As(err, &de) || de.Kind != "auth" {
+		t.Fatalf("want auth domain error, got %v", err)
 	}
 }
 

@@ -35,16 +35,7 @@ func RefreshToken(ctx context.Context, credPath string) error {
 		oldMtime = info.ModTime()
 	}
 
-	geminiPath, err := resolveGeminiBinary()
-	if err != nil {
-		return apierrors.NewAuthError("gemini CLI not found; cannot refresh token", err)
-	}
-
-	cmd := exec.CommandContext(ctx, geminiPath, "-p", "")
-	out, execErr := cmd.CombinedOutput()
-	if execErr != nil {
-		slog.Debug("gemini CLI exec completed with error", "error", execErr, "output_bytes", len(out))
-	}
+	execErr := runGeminiCLI(ctx)
 
 	// Check immediately whether the credentials file was updated.
 	info, statErr := os.Stat(credPath)
@@ -54,7 +45,7 @@ func RefreshToken(ctx context.Context, credPath string) error {
 
 	// If the CLI failed and creds weren't updated, return immediately.
 	if execErr != nil {
-		return apierrors.NewAuthError("Gemini authentication expired; run `gemini` to re-authenticate", execErr)
+		return execErr
 	}
 
 	// CLI succeeded but creds not yet on disk — poll briefly for async write.
@@ -73,5 +64,22 @@ func RefreshToken(ctx context.Context, credPath string) error {
 		}
 	}
 
+	return nil
+}
+
+// runGeminiCLI executes the gemini CLI in headless mode to trigger a token refresh.
+// The CLI handles writing the refreshed token to disk or Keychain depending on platform.
+func runGeminiCLI(ctx context.Context) error {
+	geminiPath, err := resolveGeminiBinary()
+	if err != nil {
+		return apierrors.NewAuthError("gemini CLI not found; cannot refresh token", err)
+	}
+
+	cmd := exec.CommandContext(ctx, geminiPath, "-p", "")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Debug("gemini CLI exec completed with error", "error", err, "output_bytes", len(out))
+		return apierrors.NewAuthError("Gemini authentication expired; run `gemini` to re-authenticate", err)
+	}
 	return nil
 }

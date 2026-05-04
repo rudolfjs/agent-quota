@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,27 @@ type oauthCredentials struct {
 	IDToken      string `json:"id_token,omitempty"`
 	ExpiryDate   int64  `json:"expiry_date,omitempty"`
 	RefreshToken string `json:"refresh_token,omitempty"`
+}
+
+type credentialSource interface {
+	Read(ctx context.Context) (oauthCredentials, error)
+	Refresh(ctx context.Context) error
+}
+
+type fileSource struct {
+	path string
+}
+
+func (f fileSource) Read(_ context.Context) (oauthCredentials, error) {
+	creds, err := readCredentials(f.path)
+	if err != nil {
+		return oauthCredentials{}, apierrors.NewConfigError("failed to read Gemini OAuth credentials", err)
+	}
+	return creds, nil
+}
+
+func (f fileSource) Refresh(ctx context.Context) error {
+	return RefreshToken(ctx, f.path)
 }
 
 type loadCodeAssistResponse struct {
@@ -64,16 +86,25 @@ type quotaBucket struct {
 // Gemini implements provider.Provider for Gemini Code Assist OAuth quota data.
 type Gemini struct {
 	credPath       string
+	credPathSet    bool
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	baseURL        string
+	source         credentialSource
 }
 
 // Option configures a Gemini provider instance.
 type Option func(*Gemini)
 
 func WithCredentialsPath(path string) Option {
-	return func(g *Gemini) { g.credPath = path }
+	return func(g *Gemini) {
+		g.credPath = path
+		g.credPathSet = true
+	}
+}
+
+func WithCredentialSource(src credentialSource) Option {
+	return func(g *Gemini) { g.source = src }
 }
 
 func WithHTTPClient(client *http.Client) Option {
@@ -96,11 +127,19 @@ func New(opts ...Option) *Gemini {
 	for _, opt := range opts {
 		opt(g)
 	}
-	// Set default credentials path only if not overridden by WithCredentialsPath.
-	if g.credPath == "" {
+	// Set default credentials path only if a file source will be used. On macOS,
+	// the default source is the Gemini CLI Keychain entry unless a path is explicit.
+	if g.source == nil && g.credPath == "" && (runtime.GOOS != "darwin" || g.credPathSet) {
 		path, err := DefaultCredentialsPath()
 		g.credPath = path
 		g.defaultPathErr = err
+	}
+	if g.source == nil {
+		if runtime.GOOS == "darwin" && !g.credPathSet {
+			g.source = defaultKeychainSource()
+		} else {
+			g.source = fileSource{path: g.credPath}
+		}
 	}
 	return g
 }
@@ -111,7 +150,7 @@ func (g *Gemini) Available() bool {
 	if g.defaultPathErr != nil {
 		return false
 	}
-	creds, err := readCredentials(g.credPath)
+	creds, err := g.source.Read(context.Background())
 	if err != nil {
 		return false
 	}
@@ -122,19 +161,19 @@ func (g *Gemini) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	if g.defaultPathErr != nil {
 		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine Gemini credentials path", g.defaultPathErr)
 	}
-	creds, err := readCredentials(g.credPath)
+	creds, err := g.source.Read(ctx)
 	if err != nil {
-		return provider.QuotaResult{}, apierrors.NewConfigError("failed to read Gemini OAuth credentials", err)
+		return provider.QuotaResult{}, err
 	}
 
 	if creds.IsExpired() {
 		slog.Debug("Gemini token expired, attempting refresh")
-		if refreshErr := RefreshToken(ctx, g.credPath); refreshErr != nil {
+		if refreshErr := g.source.Refresh(ctx); refreshErr != nil {
 			return provider.QuotaResult{}, refreshErr
 		}
-		creds, err = readCredentials(g.credPath)
+		creds, err = g.source.Read(ctx)
 		if err != nil {
-			return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", err)
+			return provider.QuotaResult{}, err
 		}
 	}
 
