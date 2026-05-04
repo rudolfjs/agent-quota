@@ -1,2 +1,0 @@
-kind: Added
-body: "`--json` flag and `aq status` produce one-shot JSON output for scripts and agents"
