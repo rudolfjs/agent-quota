@@ -120,6 +120,9 @@ func TestNewRegistry_doesNotRegisterJules(t *testing.T) {
 	if _, ok := reg.Get("jules"); ok {
 		t.Fatal("registry unexpectedly contains jules provider")
 	}
+	if _, ok := reg.Get("gemini"); ok {
+		t.Fatal("registry unexpectedly contains gemini provider")
+	}
 
 	for _, name := range []string{"claude", "openai", "copilot"} {
 		if _, ok := reg.Get(name); !ok {
