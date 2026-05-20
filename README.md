@@ -78,7 +78,7 @@ Provider selection example:
 
 ```json
 {
-  "providers": ["claude", "gemini", "openai", "copilot"]
+  "providers": ["claude", "openai", "copilot"]
 }
 ```
 
@@ -86,7 +86,7 @@ TUI settings example:
 
 ```json
 {
-  "provider_order": ["claude", "openai", "gemini", "copilot"],
+  "provider_order": ["claude", "openai", "copilot"],
   "tui": {
     "hide_header": false,
     "refresh_minutes": 15
@@ -98,7 +98,6 @@ TUI settings example:
 
 - Claude: `claude` CLI login (if 429 or 403 errors occur, re-authenticate Claude Code to get a new OAuth token)
 - OpenAI: `codex login`
-- Gemini: `gemini` CLI login
 - Copilot: `copilot login`
 
 ## Development
