@@ -14,7 +14,7 @@ import (
 // Provider fetches quota and usage data from an AI provider.
 // Implementations live in internal/<name>/ and are registered in main.go.
 type Provider interface {
-	// Name returns the provider's identifier (e.g., "claude", "openai", "gemini").
+	// Name returns the provider's identifier (e.g., "claude", "openai", "copilot").
 	Name() string
 
 	// FetchQuota retrieves current usage and quota information.

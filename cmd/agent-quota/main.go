@@ -18,7 +18,6 @@ import (
 	"github.com/rudolfjs/agent-quota/internal/config"
 	"github.com/rudolfjs/agent-quota/internal/copilot"
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
-	"github.com/rudolfjs/agent-quota/internal/gemini"
 	"github.com/rudolfjs/agent-quota/internal/openai"
 	"github.com/rudolfjs/agent-quota/internal/output"
 	"github.com/rudolfjs/agent-quota/internal/provider"
@@ -122,8 +121,8 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, gemini, copilot)")
-	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. gemini-3-flash-preview)")
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, copilot)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. gpt-4o)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "force JSON output")
 	rootCmd.Flags().BoolVar(&prettyFlag, "pretty", false, "force TUI output")
 	rootCmd.Flags().BoolVarP(&quickFlag, "quick", "q", false, "start in compact quick-view mode")
@@ -280,7 +279,6 @@ func newRegistry() *provider.Registry {
 	registry := provider.NewRegistry()
 	registry.Register(claude.New())
 	registry.Register(copilot.New())
-	registry.Register(gemini.New())
 	registry.Register(openai.New())
 	return registry
 }

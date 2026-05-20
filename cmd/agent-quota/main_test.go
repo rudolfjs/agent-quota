@@ -13,27 +13,27 @@ import (
 
 func TestFilterByModel_keepsMatchingWindows(t *testing.T) {
 	results := []provider.QuotaResult{{
-		Provider: "gemini",
+		Provider: "openai",
 		Windows: []provider.Window{
-			{Name: "gemini-3-flash-preview"},
-			{Name: "gemini-3-pro"},
+			{Name: "gpt-4o"},
+			{Name: "gpt-4o-mini"},
 		},
 	}}
-	got := filterByModel(results, "gemini-3-flash-preview")
+	got := filterByModel(results, "gpt-4o")
 	if len(got[0].Windows) != 1 {
 		t.Fatalf("len(windows) = %d, want 1", len(got[0].Windows))
 	}
-	if got[0].Windows[0].Name != "gemini-3-flash-preview" {
-		t.Errorf("window name = %q, want %q", got[0].Windows[0].Name, "gemini-3-flash-preview")
+	if got[0].Windows[0].Name != "gpt-4o" {
+		t.Errorf("window name = %q, want %q", got[0].Windows[0].Name, "gpt-4o")
 	}
 }
 
 func TestFilterByModel_emptySliceWhenNoMatch(t *testing.T) {
 	results := []provider.QuotaResult{{
-		Provider: "gemini",
-		Windows:  []provider.Window{{Name: "gemini-3-pro"}},
+		Provider: "openai",
+		Windows:  []provider.Window{{Name: "gpt-4o"}},
 	}}
-	got := filterByModel(results, "gemini-3-flash-preview")
+	got := filterByModel(results, "gpt-4o-mini")
 	if got[0].Windows == nil {
 		t.Error("Windows should be empty slice, not nil")
 	}
@@ -44,8 +44,8 @@ func TestFilterByModel_emptySliceWhenNoMatch(t *testing.T) {
 
 func TestFilterByModel_noopWhenModelEmpty(t *testing.T) {
 	results := []provider.QuotaResult{{
-		Provider: "gemini",
-		Windows:  []provider.Window{{Name: "gemini-3-pro"}, {Name: "gemini-3-flash"}},
+		Provider: "openai",
+		Windows:  []provider.Window{{Name: "gpt-4o"}, {Name: "gpt-4o-mini"}},
 	}}
 	got := filterByModel(results, "")
 	if len(got[0].Windows) != 2 {
@@ -56,20 +56,20 @@ func TestFilterByModel_noopWhenModelEmpty(t *testing.T) {
 func TestFilterByModel_filtersAcrossMultipleProviders(t *testing.T) {
 	results := []provider.QuotaResult{
 		{
-			Provider: "gemini",
-			Windows:  []provider.Window{{Name: "gemini-3-flash-preview"}, {Name: "gemini-3-pro"}},
+			Provider: "openai",
+			Windows:  []provider.Window{{Name: "gpt-4o"}, {Name: "gpt-4o-mini"}},
 		},
 		{
-			Provider: "openai",
-			Windows:  []provider.Window{{Name: "gpt-4o"}, {Name: "o3"}},
+			Provider: "claude",
+			Windows:  []provider.Window{{Name: "five_hour"}, {Name: "weekly"}},
 		},
 	}
-	got := filterByModel(results, "gemini-3-flash-preview")
-	if len(got[0].Windows) != 1 || got[0].Windows[0].Name != "gemini-3-flash-preview" {
-		t.Errorf("gemini: unexpected windows %v", got[0].Windows)
+	got := filterByModel(results, "gpt-4o")
+	if len(got[0].Windows) != 1 || got[0].Windows[0].Name != "gpt-4o" {
+		t.Errorf("openai: unexpected windows %v", got[0].Windows)
 	}
 	if len(got[1].Windows) != 0 {
-		t.Errorf("openai: expected 0 windows, got %d", len(got[1].Windows))
+		t.Errorf("claude: expected 0 windows, got %d", len(got[1].Windows))
 	}
 }
 
@@ -121,7 +121,7 @@ func TestNewRegistry_doesNotRegisterJules(t *testing.T) {
 		t.Fatal("registry unexpectedly contains jules provider")
 	}
 
-	for _, name := range []string{"claude", "openai", "gemini", "copilot"} {
+	for _, name := range []string{"claude", "openai", "copilot"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Fatalf("registry missing provider %q", name)
 		}
