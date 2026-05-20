@@ -75,7 +75,7 @@ func TestUpdate_escapeMenuUsesDescriptionsForProvidersAndOrder(t *testing.T) {
 func TestEscapeMenu_selectProvidersOpensProvidersMenu(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "copilot"},
 	}
 	m := New(providers)
@@ -91,13 +91,13 @@ func TestEscapeMenu_selectProvidersOpensProvidersMenu(t *testing.T) {
 		t.Fatalf("menuMode = %v, want %v", m.menuMode, menuModeProviders)
 	}
 	view := ansi.Strip(m.View().Content)
-	if !strings.Contains(view, "Claude") || !strings.Contains(view, "Gemini") || !strings.Contains(view, "Copilot") {
+	if !strings.Contains(view, "Claude") || !strings.Contains(view, "fake") || !strings.Contains(view, "Copilot") {
 		t.Fatalf("View() = %q, want provider entries in providers menu", view)
 	}
 	if !strings.Contains(view, "Press Enter or Space to toggle providers") {
 		t.Fatalf("View() = %q, want provider selection hint", view)
 	}
-	if !strings.Contains(view, "● Claude") || !strings.Contains(view, "● Gemini") || !strings.Contains(view, "● Copilot") {
+	if !strings.Contains(view, "● Claude") || !strings.Contains(view, "● fake") || !strings.Contains(view, "● Copilot") {
 		t.Fatalf("View() = %q, want circular provider selectors", view)
 	}
 	if strings.Contains(view, "✓") || strings.Contains(view, "✦") || strings.Contains(view, "◆") || strings.Contains(view, "◉") || strings.Contains(view, "◎") {
@@ -117,7 +117,7 @@ func TestEscapeMenu_selectProvidersOpensProvidersMenu(t *testing.T) {
 func TestEscapeMenu_selectedRowsUseMinimalHighlighting(t *testing.T) {
 	m := New([]provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 	})
 	m.openProvidersMenu()
 
@@ -130,7 +130,7 @@ func TestEscapeMenu_selectedRowsUseMinimalHighlighting(t *testing.T) {
 func TestEscapeMenu_modalsUseSpaciousHeadersAndCompactBodies(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 	}
 	cases := []struct {
 		name  string
@@ -204,7 +204,7 @@ func TestEscapeMenu_toggleProvidersUpdatesSettingsAndSaves(t *testing.T) {
 	var saved []config.Settings
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "openai"},
 	}
 	m := New(
@@ -226,7 +226,7 @@ func TestEscapeMenu_toggleProvidersUpdatesSettingsAndSaves(t *testing.T) {
 		t.Fatalf("menuMode = %v, want %v", m.menuMode, menuModeProviders)
 	}
 
-	m.menuCursor = 1 // Gemini
+	m.menuCursor = 1 // fake
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
@@ -680,7 +680,7 @@ func TestEscapeMenu_selectRefreshRateUpdatesIntervalAndSaves(t *testing.T) {
 	var saved []config.Settings
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "openai"},
 	}
 	m := New(
@@ -740,7 +740,7 @@ func TestEscapeMenu_selectRefreshRateUpdatesIntervalAndSaves(t *testing.T) {
 func TestMoveSelectedProvider_reordersProvidersAndUpdatesSettings(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "openai"},
 	}
 	m := New(providers, WithSettings(config.Settings{}, func(config.Settings) error { return nil }))
@@ -749,7 +749,7 @@ func TestMoveSelectedProvider_reordersProvidersAndUpdatesSettings(t *testing.T) 
 
 	cmd := m.moveSelectedProvider(-1)
 
-	want := []string{"claude", "openai", "gemini"}
+	want := []string{"claude", "openai", "fake"}
 	if got := providerNamesFromModel(m.providers); !reflect.DeepEqual(got, want) {
 		t.Fatalf("provider order = %v, want %v", got, want)
 	}
@@ -766,13 +766,13 @@ func TestMoveSelectedProvider_reordersProvidersAndUpdatesSettings(t *testing.T) 
 	if !strings.Contains(view, "Press Enter to move provider") {
 		t.Fatalf("menuView() = %q, want order instruction", view)
 	}
-	if !strings.Contains(view, "1. Claude") || !strings.Contains(view, "2. OpenAI") || !strings.Contains(view, "3. Gemini") {
+	if !strings.Contains(view, "1. Claude") || !strings.Contains(view, "2. OpenAI") || !strings.Contains(view, "3. fake") {
 		t.Fatalf("menuView() = %q, want numbered order list without icons", view)
 	}
 	if strings.Contains(view, "✦") || strings.Contains(view, "◆") || strings.Contains(view, "◎") || strings.Contains(view, "◉") {
 		t.Fatalf("menuView() = %q, want provider icons removed from order menu", view)
 	}
-	if strings.Contains(view, "Current order") || strings.Contains(view, "Claude → OpenAI → Gemini") {
+	if strings.Contains(view, "Current order") || strings.Contains(view, "Claude → OpenAI → fake") {
 		t.Fatalf("menuView() = %q, want order preview removed", view)
 	}
 }
@@ -780,7 +780,7 @@ func TestMoveSelectedProvider_reordersProvidersAndUpdatesSettings(t *testing.T) 
 func TestUpdate_orderMenuShiftUpAndDownReordersProviders(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "openai"},
 	}
 	m := New(providers, WithSettings(config.Settings{}, func(config.Settings) error { return nil }))
@@ -791,7 +791,7 @@ func TestUpdate_orderMenuShiftUpAndDownReordersProviders(t *testing.T) {
 	m = updated.(Model)
 	m = applyCmd(t, m, cmd)
 
-	wantUp := []string{"gemini", "claude", "openai"}
+	wantUp := []string{"fake", "claude", "openai"}
 	if got := providerNamesFromModel(m.providers); !reflect.DeepEqual(got, wantUp) {
 		t.Fatalf("after shift+up provider order = %v, want %v", got, wantUp)
 	}
@@ -803,7 +803,7 @@ func TestUpdate_orderMenuShiftUpAndDownReordersProviders(t *testing.T) {
 	m = updated.(Model)
 	m = applyCmd(t, m, cmd)
 
-	wantDown := []string{"claude", "gemini", "openai"}
+	wantDown := []string{"claude", "fake", "openai"}
 	if got := providerNamesFromModel(m.providers); !reflect.DeepEqual(got, wantDown) {
 		t.Fatalf("after shift+down provider order = %v, want %v", got, wantDown)
 	}
@@ -815,7 +815,7 @@ func TestUpdate_orderMenuShiftUpAndDownReordersProviders(t *testing.T) {
 func TestUpdate_orderMenuEnterPickupAndDropReordersProviders(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 		&stubProvider{name: "openai"},
 	}
 	m := New(providers, WithSettings(config.Settings{}, func(config.Settings) error { return nil }))
@@ -837,7 +837,7 @@ func TestUpdate_orderMenuEnterPickupAndDropReordersProviders(t *testing.T) {
 	if strings.Contains(view, "Selected:") || strings.Contains(view, "Position 2") || strings.Contains(view, "Shown first") {
 		t.Fatalf("menuView() = %q, want order subtext removed", view)
 	}
-	if !strings.Contains(view, "1. Claude") || !strings.Contains(view, "2. Gemini") || !strings.Contains(view, "3. OpenAI  PICKED") {
+	if !strings.Contains(view, "1. Claude") || !strings.Contains(view, "2. fake") || !strings.Contains(view, "3. OpenAI  PICKED") {
 		t.Fatalf("menuView() = %q, want numbered providers while carrying item", view)
 	}
 	if strings.Contains(view, "✦") || strings.Contains(view, "◆") || strings.Contains(view, "◎") || strings.Contains(view, "◉") {
@@ -849,7 +849,7 @@ func TestUpdate_orderMenuEnterPickupAndDropReordersProviders(t *testing.T) {
 	m = updated.(Model)
 	m = applyCmd(t, m, cmd)
 
-	want := []string{"claude", "openai", "gemini"}
+	want := []string{"claude", "openai", "fake"}
 	if got := providerNamesFromModel(m.providers); !reflect.DeepEqual(got, want) {
 		t.Fatalf("after pickup/drop provider order = %v, want %v", got, want)
 	}
@@ -933,8 +933,8 @@ func isMenuBodyLine(line string) bool {
 		strings.Contains(trimmed, "Providers") ||
 		strings.Contains(trimmed, "● Claude") ||
 		strings.Contains(trimmed, "○ Claude") ||
-		strings.Contains(trimmed, "● Gemini") ||
-		strings.Contains(trimmed, "○ Gemini") ||
+		strings.Contains(trimmed, "● fake") ||
+		strings.Contains(trimmed, "○ fake") ||
 		strings.Contains(trimmed, "○ 5m") ||
 		strings.Contains(trimmed, "○ 10m") ||
 		strings.Contains(trimmed, "● 15m")

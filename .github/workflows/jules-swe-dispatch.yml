@@ -172,7 +172,7 @@ jobs:
             `feat|fix|docs|chore|refactor|test|ci(scope): description`
 
             Examples:
-            - `feat(provider): add Gemini usage provider`
+            - `feat(tui): add provider card pagination`
             - `fix(claude): handle token expiry on first fetch`
             - `test(tui): add spinner model unit tests`
 

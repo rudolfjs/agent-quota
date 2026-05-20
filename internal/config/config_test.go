@@ -55,7 +55,25 @@ func TestLoad_normalizesProviders(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	want := []string{"claude", "openai", "gemini"}
+	want := []string{"claude", "openai"}
+	if !reflect.DeepEqual(cfg.Providers, want) {
+		t.Fatalf("Providers = %v, want %v", cfg.Providers, want)
+	}
+}
+
+func TestLoad_dropsRemovedGeminiProviderFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"providers":["claude","gemini","openai"]}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := []string{"claude", "openai"}
 	if !reflect.DeepEqual(cfg.Providers, want) {
 		t.Fatalf("Providers = %v, want %v", cfg.Providers, want)
 	}
@@ -158,7 +176,7 @@ func TestSelectProviders_usesConfigOrder(t *testing.T) {
 	reg := provider.NewRegistry()
 	reg.Register(&fakeProvider{name: "claude", available: true})
 	reg.Register(&fakeProvider{name: "openai", available: false})
-	reg.Register(&fakeProvider{name: "gemini", available: true})
+	reg.Register(&fakeProvider{name: "fake", available: true})
 
 	got, err := config.SelectProviders(reg, "", config.Config{Providers: []string{"openai", "claude"}})
 	if err != nil {

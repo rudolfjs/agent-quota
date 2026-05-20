@@ -227,45 +227,7 @@ func metricDisplayInfo(providerName, metricName string) metricDisplay {
 			}
 		}
 	}
-	// Gemini model IDs (e.g. "gemini-2.5-flash") group by major version.
-	if prov == "gemini" {
-		if group, ok := geminiModelGroup(normalized); ok {
-			return metricDisplay{
-				Group: group,
-				Name:  prettyRawName(normalized),
-			}
-		}
-	}
 	return metricDisplay{Name: prettyRawName(normalized)}
-}
-
-// geminiModelGroup returns the display group ("Gemini 2", "Gemini 3", …) for a
-// Gemini model ID like "gemini-2.5-flash". Returns ok=false for unrecognised IDs.
-func geminiModelGroup(modelID string) (string, bool) {
-	if !strings.HasPrefix(modelID, "gemini-") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(modelID, "gemini-")
-	// rest = "2.5-flash", "3.1-pro", etc. Extract the major version digit(s).
-	dotIdx := strings.Index(rest, ".")
-	hyphenIdx := strings.Index(rest, "-")
-	end := len(rest)
-	if dotIdx >= 0 {
-		end = dotIdx
-	}
-	if hyphenIdx >= 0 && hyphenIdx < end {
-		end = hyphenIdx
-	}
-	major := rest[:end]
-	if major == "" {
-		return "", false
-	}
-	for _, c := range major {
-		if c < '0' || c > '9' {
-			return "", false
-		}
-	}
-	return fmt.Sprintf("Gemini %s", major), true
 }
 
 // splitOpenAIPrefixedMetric splits "codex_spark_five_hour" into ("codex_spark", "five_hour").
@@ -292,7 +254,7 @@ func baseMetricPrettyName(base string) string {
 }
 
 // prettyRawName converts raw API identifiers to title-cased human-readable labels.
-// "gemini-2.5-flash" → "Gemini 2.5 Flash", "premium_interactions" → "Premium Interactions".
+// "premium_interactions" → "Premium Interactions".
 func prettyRawName(s string) string {
 	s = strings.ReplaceAll(s, "-", " ")
 	s = strings.ReplaceAll(s, "_", " ")

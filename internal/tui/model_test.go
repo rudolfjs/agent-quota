@@ -180,7 +180,7 @@ func TestProviderChipsView_defaultListExcludesJules(t *testing.T) {
 	if strings.Contains(got, "Jules") {
 		t.Fatalf("providerChipsView() = %q, want Jules omitted from default chips", got)
 	}
-	for _, want := range []string{"Claude", "OpenAI", "Gemini", "Copilot"} {
+	for _, want := range []string{"Claude", "OpenAI", "Copilot"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("providerChipsView() = %q, want %q chip", got, want)
 		}
@@ -440,7 +440,7 @@ func TestHeaderView_rendersStyledLogoWhenWide(t *testing.T) {
 	if !strings.Contains(got, "agent-quota") {
 		t.Fatalf("headerView() = %q, want agent-quota wordmark", got)
 	}
-	if !strings.Contains(got, "Claude") || !strings.Contains(got, "OpenAI") || !strings.Contains(got, "Gemini") {
+	if !strings.Contains(got, "Claude") || !strings.Contains(got, "OpenAI") || !strings.Contains(got, "Copilot") {
 		t.Fatalf("headerView() = %q, want provider chips in header", got)
 	}
 	if strings.Contains(got, "__ _  __ _  ___ _ __ | |_") {
@@ -554,14 +554,14 @@ func TestHeaderView_usesLightPaletteWhenConfigured(t *testing.T) {
 func TestUpdate_scrollKeyMovesViewport(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 	}
 	m := New(providers)
 
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 10})
 	m = updated.(Model)
 
-	for _, name := range []string{"claude", "gemini"} {
+	for _, name := range []string{"claude", "fake"} {
 		updated, _ = m.Update(fetchResultMsg{providerName: name, result: overflowingResult(name)})
 		m = updated.(Model)
 	}
@@ -578,14 +578,14 @@ func TestUpdate_scrollKeyMovesViewport(t *testing.T) {
 func TestView_showsScrollbarWhenContentOverflows(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{name: "claude"},
-		&stubProvider{name: "gemini"},
+		&stubProvider{name: "fake"},
 	}
 	m := New(providers)
 
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 10})
 	m = updated.(Model)
 
-	for _, name := range []string{"claude", "gemini"} {
+	for _, name := range []string{"claude", "fake"} {
 		updated, _ = m.Update(fetchResultMsg{providerName: name, result: overflowingResult(name)})
 		m = updated.(Model)
 	}

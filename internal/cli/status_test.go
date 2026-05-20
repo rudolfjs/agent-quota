@@ -35,7 +35,7 @@ func (p *statusProvider) ResetBackoff() error {
 func TestFetchAll_marksUnavailableWithoutFetching(t *testing.T) {
 	providers := []provider.Provider{
 		&statusProvider{name: "claude", available: false},
-		&statusProvider{name: "gemini", available: true},
+		&statusProvider{name: "fake", available: true},
 	}
 
 	results := fetchAll(t.Context(), providers, false)

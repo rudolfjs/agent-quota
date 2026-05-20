@@ -34,8 +34,8 @@ func TestSaveSettings_roundTripsJSONSettingsFile(t *testing.T) {
 	path := filepath.Join(dir, "settings")
 	want := config.Settings{
 		Providers:     []string{"claude", "openai"},
-		ProviderOrder: []string{"claude", "openai", "gemini"},
-		QuickView:     []string{"claude:five_hour", "gemini:gemini-3-pro-preview"},
+		ProviderOrder: []string{"claude", "openai", "fake"},
+		QuickView:     []string{"claude:five_hour", "fake:metric_a"},
 		TUI: config.TUISettings{
 			HideHeader:     true,
 			RefreshMinutes: 10,
@@ -66,7 +66,7 @@ func TestSaveSettings_roundTripsJSONSettingsFile(t *testing.T) {
 func TestApplyProviderSelection_filtersProvidersAndPreservesOrder(t *testing.T) {
 	providers := []provider.Provider{
 		&fakeProvider{name: "claude", available: true},
-		&fakeProvider{name: "gemini", available: true},
+		&fakeProvider{name: "fake", available: true},
 		&fakeProvider{name: "openai", available: true},
 	}
 
@@ -80,12 +80,12 @@ func TestApplyProviderSelection_filtersProvidersAndPreservesOrder(t *testing.T) 
 func TestApplyProviderOrder_reordersProvidersAndPreservesUnknownTail(t *testing.T) {
 	providers := []provider.Provider{
 		&fakeProvider{name: "claude", available: true},
-		&fakeProvider{name: "gemini", available: true},
+		&fakeProvider{name: "fake", available: true},
 		&fakeProvider{name: "openai", available: true},
 	}
 
 	got := config.ApplyProviderOrder(providers, []string{"openai", "claude"})
-	want := []string{"openai", "claude", "gemini"}
+	want := []string{"openai", "claude", "fake"}
 	if names := providerNames(got); !reflect.DeepEqual(names, want) {
 		t.Fatalf("provider names = %v, want %v", names, want)
 	}
@@ -119,7 +119,7 @@ func TestLoadSettings_clampsRefreshMinutesToMinimum(t *testing.T) {
 func TestLoadSettings_normalizesQuickViewMetricIDs(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	if err := os.WriteFile(path, []byte(`{"quick_view":[" Claude : five_hour ","gemini:gemini-3-pro-preview","","GEMINI:gemini-3-pro-preview"]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"quick_view":[" Claude : five_hour ","fake:metric_a","","FAKE:metric_a"]}`), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestLoadSettings_normalizesQuickViewMetricIDs(t *testing.T) {
 		t.Fatalf("LoadSettings() error = %v", err)
 	}
 
-	want := []string{"claude:five_hour", "gemini:gemini-3-pro-preview"}
+	want := []string{"claude:five_hour", "fake:metric_a"}
 	if !reflect.DeepEqual(got.QuickView, want) {
 		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
 	}
@@ -138,6 +138,30 @@ func TestLoadSettings_dropsRemovedJulesEntries(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	payload := `{"providers":["claude","jules"],"provider_order":["claude","jules","openai"],"quick_view":["claude:five_hour","jules:daily","openai:five_hour"]}`
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	got, err := config.LoadSettings(path)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if want := []string{"claude"}; !reflect.DeepEqual(got.Providers, want) {
+		t.Fatalf("Providers = %v, want %v", got.Providers, want)
+	}
+	if want := []string{"claude", "openai"}; !reflect.DeepEqual(got.ProviderOrder, want) {
+		t.Fatalf("ProviderOrder = %v, want %v", got.ProviderOrder, want)
+	}
+	if want := []string{"claude:five_hour", "openai:five_hour"}; !reflect.DeepEqual(got.QuickView, want) {
+		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
+	}
+}
+
+func TestLoadSettings_dropsRemovedGeminiEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	payload := `{"providers":["claude","gemini"],"provider_order":["claude","gemini","openai"],"quick_view":["claude:five_hour","gemini:daily","openai:five_hour"]}`
 	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}

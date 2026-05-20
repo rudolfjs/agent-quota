@@ -1,0 +1,3 @@
+kind: Removed
+body: Remove Gemini provider — gemini OAuth quota tracking is no longer supported. Existing settings.json or config.json entries referencing gemini are silently dropped on next launch.
+time: 2026-05-20T19:56:17.014788295+10:00
