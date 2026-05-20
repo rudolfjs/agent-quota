@@ -12,6 +12,8 @@
 
 **Ordering rationale:** Spec lists 7 logical commits but their stated order would break tests mid-stream (test assertions on `"Gemini"` display names would fail once the TUI cases are removed). The plan reorders so test renames happen *before* the TUI deletions they correspond to.
 
+**Planning-doc deletion timing:** The spec said "delete before PR is raised". The plan does the deletion in Task 11 — *after* CI is green on the initial PR push — to avoid an earlier task deleting the file an executor is driving from. The PR's final diff against `main` for `docs/superpowers/` is zero after Task 11's followup push.
+
 ---
 
 ## File structure
@@ -952,55 +954,7 @@ Repeat until codex has no remaining findings.
 
 ---
 
-## Task 9: Delete planning spec + plan before pushing
-
-**Files:**
-- Delete: `docs/superpowers/specs/2026-05-20-remove-gemini-design.md`
-- Delete: `docs/superpowers/plans/2026-05-20-remove-gemini.md`
-
-This task runs only after Task 8 completes. After deletion, the net diff against `main` for `docs/superpowers/` is zero (both files were added on the branch and are deleted here).
-
-- [ ] **Step 1: Delete both planning files**
-
-```bash
-git rm docs/superpowers/specs/2026-05-20-remove-gemini-design.md
-git rm docs/superpowers/plans/2026-05-20-remove-gemini.md
-```
-
-- [ ] **Step 2: Inspect the resulting docs tree**
-
-```bash
-ls docs/superpowers/specs/ 2>/dev/null || true
-ls docs/superpowers/plans/ 2>/dev/null || true
-ls docs/superpowers/ 2>/dev/null
-```
-
-If `specs/` and `plans/` directories are now empty, leave them — git tracks the absence of files, not empty directories.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git commit -m "$(cat <<'EOF'
-chore: remove planning spec and implementation plan
-
-Both the gemini-removal planning spec and the implementation plan were
-session artifacts, not product artifacts. Net diff against main for
-docs/superpowers/ is zero.
-EOF
-)"
-```
-
-- [ ] **Step 4: Verify net diff vs main for both files is empty**
-
-```bash
-git diff main..HEAD -- docs/superpowers/specs/2026-05-20-remove-gemini-design.md docs/superpowers/plans/2026-05-20-remove-gemini.md
-```
-
-Expected: no output (both files added and deleted within this branch — net change is zero).
-
----
-
-## Task 10: Push branch and raise PR
+## Task 9: Push branch and raise PR
 
 - [ ] **Step 1: Final full verification before push**
 
@@ -1058,7 +1012,7 @@ EOF
 
 ---
 
-## Task 11: Watch CI to green
+## Task 10: Watch CI to green
 
 - [ ] **Step 1: Poll CI status**
 
@@ -1081,16 +1035,83 @@ Do NOT merge. The acceptance criterion is "PR raised, CI green in GitHub" — me
 
 ---
 
+## Task 11: Delete planning spec + plan as the final cleanup push
+
+**Files:**
+- Delete: `docs/superpowers/specs/2026-05-20-remove-gemini-design.md`
+- Delete: `docs/superpowers/plans/2026-05-20-remove-gemini.md`
+
+This task is intentionally the LAST step, after CI is already green on the initial PR push. Reason: deleting this plan file mid-execution would strip Tasks 9 and 10 out from under any executor that drives off the file. Running deletion at the very end is safe — by this point all executor steps are complete.
+
+After this cleanup push, the PR diff against `main` for `docs/superpowers/` is zero, and the second CI run (triggered by the cleanup push) should stay green.
+
+- [ ] **Step 1: Confirm CI is green on the initial push before deleting**
+
+```bash
+gh pr checks
+```
+
+Expected: all checks pass. Do NOT proceed if any check is red — fix the underlying issue first.
+
+- [ ] **Step 2: Delete both planning files**
+
+```bash
+git rm docs/superpowers/specs/2026-05-20-remove-gemini-design.md
+git rm docs/superpowers/plans/2026-05-20-remove-gemini.md
+```
+
+- [ ] **Step 3: Inspect the resulting docs tree**
+
+```bash
+ls docs/superpowers/specs/ 2>/dev/null || true
+ls docs/superpowers/plans/ 2>/dev/null || true
+ls docs/superpowers/ 2>/dev/null
+```
+
+If `specs/` and `plans/` directories are now empty, leave them — git tracks the absence of files, not empty directories.
+
+- [ ] **Step 4: Commit and push**
+
+```bash
+git commit -m "$(cat <<'EOF'
+chore: remove planning spec and implementation plan
+
+Both the gemini-removal planning spec and the implementation plan were
+session artifacts, not product artifacts. Net diff against main for
+docs/superpowers/ is now zero.
+EOF
+)"
+git push
+```
+
+- [ ] **Step 5: Verify the PR's net diff for the planning files is zero**
+
+```bash
+git diff main..HEAD -- docs/superpowers/specs/2026-05-20-remove-gemini-design.md docs/superpowers/plans/2026-05-20-remove-gemini.md
+```
+
+Expected: no output.
+
+- [ ] **Step 6: Wait for CI to re-green on the cleanup commit**
+
+```bash
+gh pr checks --watch
+```
+
+Expected: all checks pass. The PR is now in its final shape. Do NOT merge.
+
+---
+
 ## Self-review checklist
 
 This section is for the executing agent to verify before signalling completion:
 
-- [ ] All 8 production commits (Tasks 1–7 + Task 9) compile and pass `go test -race ./...` independently when checked out at that commit (no broken intermediate state)
+- [ ] All 7 production commits (Tasks 1–7) compile and pass `go test -race ./...` independently when checked out at that commit (no broken intermediate state)
 - [ ] `golangci-lint run ./...` clean — specifically no `unused` complaints about helpers that lost their last caller
 - [ ] No surviving `gemini` reference in any file outside `CHANGELOG.md`, `.changes/0.1.0.md`, and the new `.changes/unreleased/removed-*.yaml`
 - [ ] The negative-assertion fix at `menu_test.go:775` references the post-rename sequence (`fake`), not the pre-rename one (`Gemini`)
-- [ ] The Codex adversarial-review loop terminated with codex having no remaining findings
-- [ ] The spec file is deleted in the final pre-push commit
+- [ ] The Codex adversarial-review loop on the executed work (Task 8) terminated with codex having no remaining findings
+- [ ] The planning spec AND plan are both deleted in Task 11's final cleanup push
 - [ ] PR URL printed back to the user
-- [ ] CI is fully green
+- [ ] CI is fully green (both on the initial push and after Task 11's cleanup push)
 - [ ] PR is NOT merged
