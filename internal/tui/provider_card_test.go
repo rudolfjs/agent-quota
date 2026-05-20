@@ -185,7 +185,7 @@ func TestRenderProviderCard_containsPlanAndStatus(t *testing.T) {
 
 func TestRenderProviderCard_unavailableStatus(t *testing.T) {
 	r := provider.QuotaResult{
-		Provider:  "gemini",
+		Provider:  "fake",
 		Status:    "unavailable",
 		FetchedAt: time.Now(),
 	}
@@ -288,25 +288,6 @@ func TestRenderProviderCard_openAIUsesWhiteHeadingAndGrayBars(t *testing.T) {
 	}
 }
 
-func TestRenderProviderCard_geminiKeepsPurpleTheme(t *testing.T) {
-	r := provider.QuotaResult{
-		Provider: "gemini",
-		Status:   "ok",
-		Windows: []provider.Window{{
-			Name:        "five_hour",
-			Utilization: 0.35,
-			ResetsAt:    time.Now().Add(2 * time.Hour),
-		}},
-		FetchedAt: time.Now(),
-	}
-
-	got := RenderProviderCard(r, 60)
-
-	if !strings.Contains(got, "\x1b[38;2;139;92;246m") {
-		t.Fatalf("expected Gemini card to keep purple theme, got:\n%q", got)
-	}
-}
-
 func TestRenderProviderCard_openAILightThemeUsesDarkHeadingAndSoftTrack(t *testing.T) {
 	r := provider.QuotaResult{
 		Provider: "openai",
@@ -378,9 +359,6 @@ func TestWindowDuration_knownWindows(t *testing.T) {
 		{"seven_day_opus", 7 * 24 * time.Hour},
 		{"codex_spark_five_hour", 5 * time.Hour},
 		{"codex_spark_seven_day", 7 * 24 * time.Hour},
-		{"gemini-2.5-pro", 24 * time.Hour},
-		{"gemini-2.5-flash", 24 * time.Hour},
-		{"gemini-3.1-pro-preview", 24 * time.Hour},
 		{"unknown_window", 0},
 		{"chat", 0},
 	}

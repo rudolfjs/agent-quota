@@ -45,7 +45,7 @@ func TestRegistry_Available_filtersUnavailable(t *testing.T) {
 	reg := provider.NewRegistry()
 	reg.Register(&fakeProvider{name: "claude", available: true})
 	reg.Register(&fakeProvider{name: "openai", available: false})
-	reg.Register(&fakeProvider{name: "gemini", available: true})
+	reg.Register(&fakeProvider{name: "fake", available: true})
 
 	avail := reg.Available()
 	if len(avail) != 2 {
