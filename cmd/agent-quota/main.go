@@ -122,7 +122,7 @@ func main() {
 	}
 
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "specific provider to query (e.g. claude, openai, copilot)")
-	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. gpt-4o)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "filter output to a specific model window (e.g. five_hour)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "force JSON output")
 	rootCmd.Flags().BoolVar(&prettyFlag, "pretty", false, "force TUI output")
 	rootCmd.Flags().BoolVarP(&quickFlag, "quick", "q", false, "start in compact quick-view mode")

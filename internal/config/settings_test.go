@@ -157,3 +157,27 @@ func TestLoadSettings_dropsRemovedJulesEntries(t *testing.T) {
 		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
 	}
 }
+
+func TestLoadSettings_dropsRemovedGeminiEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	payload := `{"providers":["claude","gemini"],"provider_order":["claude","gemini","openai"],"quick_view":["claude:five_hour","gemini:daily","openai:five_hour"]}`
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	got, err := config.LoadSettings(path)
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if want := []string{"claude"}; !reflect.DeepEqual(got.Providers, want) {
+		t.Fatalf("Providers = %v, want %v", got.Providers, want)
+	}
+	if want := []string{"claude", "openai"}; !reflect.DeepEqual(got.ProviderOrder, want) {
+		t.Fatalf("ProviderOrder = %v, want %v", got.ProviderOrder, want)
+	}
+	if want := []string{"claude:five_hour", "openai:five_hour"}; !reflect.DeepEqual(got.QuickView, want) {
+		t.Fatalf("QuickView = %v, want %v", got.QuickView, want)
+	}
+}
