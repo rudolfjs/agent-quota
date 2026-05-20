@@ -10,7 +10,6 @@ import (
 
 const (
 	claudeColorHex    = "#DE7356"
-	geminiColorHex    = "#8B5CF6"
 	copilotColorHex   = "#60A5FA"
 	openAIColorHex    = "#FFFFFF"
 	openAIBarColorHex = "#9CA3AF"
@@ -149,30 +148,6 @@ func themeForProvider(name string, palette appPalette) providerTheme {
 			TrackHex:   "#E2E8F0",
 			ChipBGHex:  "#E2E8F0",
 			ChipFGHex:  "#0F172A",
-		}
-
-	case "gemini":
-		if palette.IsDark {
-			return providerTheme{
-				BorderHex:  geminiColorHex,
-				TitleHex:   geminiColorHex,
-				BadgeBGHex: "#DDD6FE",
-				BadgeFGHex: "#312E81",
-				BarHex:     geminiColorHex,
-				TrackHex:   "#334155",
-				ChipBGHex:  "#312E81",
-				ChipFGHex:  "#DDD6FE",
-			}
-		}
-		return providerTheme{
-			BorderHex:  "#7C3AED",
-			TitleHex:   "#7C3AED",
-			BadgeBGHex: "#E9D5FF",
-			BadgeFGHex: "#581C87",
-			BarHex:     geminiColorHex,
-			TrackHex:   "#E2E8F0",
-			ChipBGHex:  "#E9D5FF",
-			ChipFGHex:  "#581C87",
 		}
 
 	case "copilot":
@@ -442,7 +417,6 @@ func logoBarsView(palette appPalette) string {
 		lipgloss.Center,
 		providerTitleStyle(themeForProvider("claude", palette)).Render("▌"),
 		providerTitleStyle(themeForProvider("openai", palette)).Render("▌"),
-		providerTitleStyle(themeForProvider("gemini", palette)).Render("▌"),
 		providerTitleStyle(themeForProvider("copilot", palette)).Render("▌"),
 	)
 }

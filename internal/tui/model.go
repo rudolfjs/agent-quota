@@ -748,7 +748,7 @@ func renderBrandBanner(width int, palette appPalette, providerNames []string) st
 
 func providerChipsView(palette appPalette, providerNames []string) string {
 	if len(providerNames) == 0 {
-		providerNames = []string{"claude", "openai", "gemini", "copilot"}
+		providerNames = []string{"claude", "openai", "copilot"}
 	}
 	chips := make([]string, 0, len(providerNames))
 	for _, name := range providerNames {

@@ -124,8 +124,6 @@ func providerDisplayName(name string) string {
 		return "Claude"
 	case "openai":
 		return "OpenAI"
-	case "gemini":
-		return "Gemini"
 	case "copilot":
 		return "Copilot"
 	default:
@@ -308,10 +306,6 @@ func injectGuideMarker(bar string, guidePos int) string {
 // windowDuration returns the total duration for a known window name.
 // Returns 0 for unrecognised windows.
 func windowDuration(name string) time.Duration {
-	// Gemini model windows (e.g. "gemini-2.5-pro") use a 24-hour reset.
-	if strings.HasPrefix(name, "gemini-") {
-		return 24 * time.Hour
-	}
 	base := name
 	// Strip known prefixes (e.g. "codex_spark_five_hour" → "five_hour").
 	for _, suffix := range []string{"_five_hour", "_seven_day"} {
