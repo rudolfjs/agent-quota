@@ -952,47 +952,51 @@ Repeat until codex has no remaining findings.
 
 ---
 
-## Task 9: Delete planning spec before pushing
+## Task 9: Delete planning spec + plan before pushing
 
 **Files:**
 - Delete: `docs/superpowers/specs/2026-05-20-remove-gemini-design.md`
+- Delete: `docs/superpowers/plans/2026-05-20-remove-gemini.md`
 
-This task runs only after Task 8 completes. After deletion, the net diff against `main` for the spec file is zero (it was added on the branch in commit `059ddfe…` and deleted here).
+This task runs only after Task 8 completes. After deletion, the net diff against `main` for `docs/superpowers/` is zero (both files were added on the branch and are deleted here).
 
-- [ ] **Step 1: Delete the spec**
+- [ ] **Step 1: Delete both planning files**
 
 ```bash
 git rm docs/superpowers/specs/2026-05-20-remove-gemini-design.md
+git rm docs/superpowers/plans/2026-05-20-remove-gemini.md
 ```
 
-- [ ] **Step 2: Confirm directory tree is empty or appropriate**
+- [ ] **Step 2: Inspect the resulting docs tree**
 
 ```bash
 ls docs/superpowers/specs/ 2>/dev/null || true
+ls docs/superpowers/plans/ 2>/dev/null || true
 ls docs/superpowers/ 2>/dev/null
 ```
 
-If the `specs/` directory is now empty, leave it — git tracks the absence of files, not empty directories.
+If `specs/` and `plans/` directories are now empty, leave them — git tracks the absence of files, not empty directories.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
-chore: remove planning spec
+chore: remove planning spec and implementation plan
 
-The gemini-removal planning spec was a session artifact, not a product
-artifact. Net diff against main for this file is zero.
+Both the gemini-removal planning spec and the implementation plan were
+session artifacts, not product artifacts. Net diff against main for
+docs/superpowers/ is zero.
 EOF
 )"
 ```
 
-- [ ] **Step 4: Verify net diff vs main for the spec file is empty**
+- [ ] **Step 4: Verify net diff vs main for both files is empty**
 
 ```bash
-git diff main..HEAD -- docs/superpowers/specs/2026-05-20-remove-gemini-design.md
+git diff main..HEAD -- docs/superpowers/specs/2026-05-20-remove-gemini-design.md docs/superpowers/plans/2026-05-20-remove-gemini.md
 ```
 
-Expected: no output (file added and deleted within this branch — net change is zero).
+Expected: no output (both files added and deleted within this branch — net change is zero).
 
 ---
 
