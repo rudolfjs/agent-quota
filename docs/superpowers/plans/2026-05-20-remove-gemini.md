@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.25, `charm.land/bubbletea/v2` (TUI), `lipgloss/v2` (styling), `cobra` + `fang/v2` (CLI), `changie` (changelogs), `lefthook` (git hooks), `golangci-lint` (lint), standard `go test -race`.
 
-**Reference spec:** `docs/superpowers/specs/2026-05-20-remove-gemini-design.md` (planning artifact; will be deleted by the final task before the PR is pushed).
+**Reference spec:** `docs/superpowers/specs/2026-05-20-remove-gemini-design.md` (planning artifact; deleted by Task 11 after CI is green on the initial PR push — see the "Planning-doc deletion timing" note below).
 
 **Ordering rationale:** Spec lists 7 logical commits but their stated order would break tests mid-stream (test assertions on `"Gemini"` display names would fail once the TUI cases are removed). The plan reorders so test renames happen *before* the TUI deletions they correspond to.
 
