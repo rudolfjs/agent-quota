@@ -128,7 +128,7 @@ func normalizeProviderName(name string) string {
 
 func isRemovedProviderName(name string) bool {
 	switch normalizeProviderName(name) {
-	case "jules":
+	case "jules", "gemini":
 		return true
 	default:
 		return false
