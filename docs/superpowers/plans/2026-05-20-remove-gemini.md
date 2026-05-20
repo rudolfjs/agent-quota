@@ -12,7 +12,7 @@
 
 **Ordering rationale:** Spec lists 7 logical commits but their stated order would break tests mid-stream (test assertions on `"Gemini"` display names would fail once the TUI cases are removed). The plan reorders so test renames happen *before* the TUI deletions they correspond to.
 
-**Planning-doc deletion timing:** The spec said "delete before PR is raised". The plan does the deletion in Task 11 — *after* CI is green on the initial PR push — to avoid an earlier task deleting the file an executor is driving from. The PR's final diff against `main` for `docs/superpowers/` is zero after Task 11's followup push.
+**Planning-doc deletion timing:** The spec said "delete before PR is raised". The plan defers the deletion to Task 11 — *after* CI is green on the initial PR push — to avoid an earlier task deleting the file an executor is driving from. The PR's final diff against `main` for `docs/superpowers/` is zero after Task 11's follow-up push. A second short CI run is triggered by the cleanup push.
 
 ---
 
@@ -1037,11 +1037,13 @@ Do NOT merge. The acceptance criterion is "PR raised, CI green in GitHub" — me
 
 ## Task 11: Delete planning spec + plan as the final cleanup push
 
+**READ FIRST — all of Task 11 before executing any step.** Step 2 deletes this plan file from disk. After Step 2, you can no longer re-read the remaining steps. Read the whole task end-to-end now, then execute.
+
 **Files:**
 - Delete: `docs/superpowers/specs/2026-05-20-remove-gemini-design.md`
 - Delete: `docs/superpowers/plans/2026-05-20-remove-gemini.md`
 
-This task is intentionally the LAST step, after CI is already green on the initial PR push. Reason: deleting this plan file mid-execution would strip Tasks 9 and 10 out from under any executor that drives off the file. Running deletion at the very end is safe — by this point all executor steps are complete.
+This task is intentionally the LAST step, after CI is already green on the initial PR push. Deleting this plan mid-execution at any earlier task would strip the checklist out from under a file-driven executor. By Task 11 all other executor steps are complete; the deletion is safe.
 
 After this cleanup push, the PR diff against `main` for `docs/superpowers/` is zero, and the second CI run (triggered by the cleanup push) should stay green.
 
@@ -1053,7 +1055,7 @@ gh pr checks
 
 Expected: all checks pass. Do NOT proceed if any check is red — fix the underlying issue first.
 
-- [ ] **Step 2: Delete both planning files**
+- [ ] **Step 2: Delete both planning files (this also removes Steps 3–6 from disk — you should already have read them by now)**
 
 ```bash
 git rm docs/superpowers/specs/2026-05-20-remove-gemini-design.md
@@ -1073,6 +1075,7 @@ If `specs/` and `plans/` directories are now empty, leave them — git tracks th
 - [ ] **Step 4: Commit and push**
 
 ```bash
+git add -A
 git commit -m "$(cat <<'EOF'
 chore: remove planning spec and implementation plan
 
@@ -1083,6 +1086,8 @@ EOF
 )"
 git push
 ```
+
+(`git add -A` is belt-and-braces — `git rm` already staged the deletions, but `add -A` picks up any incidental changes from Step 3 inspection.)
 
 - [ ] **Step 5: Verify the PR's net diff for the planning files is zero**
 
