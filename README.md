@@ -12,7 +12,7 @@ Pretty TUI for humans, headless JSON for scripts and agents.
 ## Quick View Example
 
 <p align="center">
-  <img src="docs/img/qexample.png" alt="Agent Quota TUI example">
+  <img src="docs/img/qexample.png" alt="Agent Quota TUI example" width="717">
 </p>
 
 ## Install
