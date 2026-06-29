@@ -88,6 +88,8 @@ CI requires a changie fragment for non-test product changes in:
 
 Changes limited to docs, tests, or other non-product files do not need a fragment.
 
+Dependabot PRs (authored by `dependabot[bot]`) are exempt: dependency-bump PRs change `go.mod`/`go.sum` but can't generate a fragment, so CI skips the requirement for them.
+
 ### For normal PRs
 
 Add one unreleased fragment per logical change:
@@ -132,4 +134,4 @@ CI runs on PRs and push-to-main (`.github/workflows/ci.yml`). Three parallel job
 
 - **go-checks** — gofmt, go vet, golangci-lint, test, build, install script syntax
 - **lefthook** — runs `pre-commit` and `pre-push` hooks in CI
-- **changie** — PRs touching product code require a changie fragment in `.changes/unreleased/`
+- **changie** — PRs touching product code require a changie fragment in `.changes/unreleased/` (Dependabot PRs are exempt)
