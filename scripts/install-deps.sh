@@ -71,11 +71,11 @@ install_tools() {
   ok "lefthook"
 
   info "installing changie..."
-  go install github.com/miniscruff/changie@latest
+  go install github.com/miniscruff/changie@v1.25.2
   ok "changie"
 
   info "installing golangci-lint..."
-  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
   ok "golangci-lint"
 }
 

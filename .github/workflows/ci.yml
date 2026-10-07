@@ -39,7 +39,7 @@ jobs:
         run: go vet ./...
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
       - name: Run golangci-lint
         run: golangci-lint run ./...
@@ -70,7 +70,7 @@ jobs:
       - name: Install tooling
         run: |
           go install github.com/evilmartians/lefthook/v2@v2.1.2
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Run pre-commit hook
@@ -91,16 +91,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Install changie
-        run: |
-          go install github.com/miniscruff/changie@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        uses: miniscruff/changie-action@v3
+        with:
+          version: v1.25.2
 
       - name: Require changie fragment for product changes
         if: >-
