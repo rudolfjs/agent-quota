@@ -123,3 +123,7 @@ make build
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development, changie, and release workflow.
+
+## License
+
+[MIT](LICENSE) © 2026 Rudolf J.
