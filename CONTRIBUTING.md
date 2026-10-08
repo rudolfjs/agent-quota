@@ -1,6 +1,6 @@
 # Contributing
 
-This repository uses automated checks, `changie`-managed release notes, and tag-driven GitHub releases.
+This repository uses automated checks, `changie`-managed release notes, and PR-driven GitHub releases (see [Release flow](#release-flow)).
 
 ## Prerequisites
 
@@ -109,24 +109,13 @@ Use one of these kinds:
 
 ## Release flow
 
-Releases are fully automated. Just tag and push:
+Releases are cut from the GitHub web UI; no local tagging is needed.
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+1. **Prepare** — Actions → **Release — Prepare PR** → *Run workflow*, and enter the version (`X.Y.Z`, no leading `v`). The workflow (`.github/workflows/release-prepare.yml`) checks that the version is newer than the latest `.changes/<version>.md` and that unreleased fragments exist. It then batches them into `.changes/<version>.md`, rebuilds `CHANGELOG.md`, and opens a `release/v<version>` PR.
+2. **Review and merge** — CI and **Release — PR guard** (`release-pr-guard.yml`) run on the PR. The guard checks that the version is still newer than `main`. Review the batched notes, then merge.
+3. **Finalize** — merging runs **Release — Finalize on merge** (`release-finalize.yml`) on the merge commit. It runs the tests, builds the linux/amd64 archive with version injection, pushes an annotated `v<version>` tag, and publishes the GitHub Release with the changie notes, archive, checksums, and `install.sh`.
 
-The release pipeline (`.github/workflows/release.yml`) will:
-
-1. Verify the tag points to a commit on `main`
-2. Run tests and build verification
-3. Auto-batch unreleased changie fragments into `.changes/<version>.md` and update `CHANGELOG.md`
-4. Commit the changelog updates directly to `main` (via GitHub App token with ruleset bypass)
-5. Move the tag to include the changelog commit
-6. Build linux/amd64 binary with version injection
-7. Publish the GitHub Release with changie notes, artifacts, checksums, and `install.sh`
-
-> If `.changes/<version>.md` already exists (manual batch), the pipeline skips steps 3–5 and uses the existing notes.
+Finalize never pushes to `main` and is safe to re-run. If the tag already exists on the merge commit, it only creates the missing release. If the tag points anywhere else, it fails.
 
 ## CI summary
 

@@ -1,0 +1,191 @@
+name: Release — Prepare PR
+
+# Manually-triggered first half of the release (Actions tab -> "Release —
+# Prepare PR" -> Run workflow). Produces a reviewable `release/v<version>` PR
+# that batches the changie fragments into .changes/<version>.md and rebuilds
+# CHANGELOG.md. Nothing is published here — merging the PR is what cuts the
+# release (see release-finalize.yml). This replaces the old "push a v* tag"
+# entry point: the version you used to type as a git tag you now type once into
+# the `version` input below.
+#
+# The current version is the newest .changes/X.Y.Z.md on main (changie's own
+# record of shipped versions); there is no separate VERSION file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, no leading v, no zero-padded components (e.g. 0.3.0). Batched explicitly — no auto-bump."
+        required: true
+        type: string
+
+# All writes go through the GitHub App token so the resulting PR's events are
+# attributed to the app (not GITHUB_TOKEN) and therefore DO trigger ci.yml and
+# release-pr-guard.yml on the release PR.
+permissions:
+  contents: read
+
+# One prepare run per version: simultaneous same-version dispatches serialize
+# (the second then fails cleanly on the branch-exists precondition) instead of
+# racing the branch push. Scoped per version because, by default, GitHub keeps
+# only one PENDING run per concurrency group — a global group would let a
+# third dispatch silently cancel a queued run for an unrelated version.
+concurrency:
+  group: release-prepare-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Mint a least-privilege token (omitting these grants the App's full
+          # installation set): push the release branch (contents) and open the
+          # PR (pull-requests). Checkout persists this token into .git/config,
+          # where later steps can read it — keep its scope minimal.
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Validate version and preconditions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # Each component is a plain integer: no leading zeros, so 0.1.00
+          # cannot be passed off as newer than 0.1.0 (GNU sort -V orders it
+          # after 0.1.0, which would let it through the monotonic check
+          # below and publish a non-SemVer tag for the same numeric version).
+          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if ! printf '%s' "$VERSION" | grep -Eq "$SEMVER_RE"; then
+            echo "::error::version must be X.Y.Z with no leading v and no zero-padded components. Got: '$VERSION'"
+            exit 1
+          fi
+
+          # Monotonic version guard: a typo like 0.1.5 would otherwise pass
+          # and downgrade the project. Compare semver-aware (GNU sort -V, so
+          # 0.9.0 < 0.10.0) against the newest released .changes/X.Y.Z.md.
+          CURRENT_VERSION="$(find .changes -maxdepth 1 -type f -name '*.md' -printf '%f\n' \
+            | sed -n 's/^\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\.md$/\1/p' \
+            | sort -V | tail -n1)"
+          if [ -n "$CURRENT_VERSION" ]; then
+            if [ "$VERSION" = "$CURRENT_VERSION" ]; then
+              echo "::error::version $VERSION equals the current version ($CURRENT_VERSION); nothing to release."
+              exit 1
+            fi
+            LOWER="$(printf '%s\n%s\n' "$VERSION" "$CURRENT_VERSION" | sort -V | head -n1)"
+            if [ "$LOWER" != "$CURRENT_VERSION" ]; then
+              echo "::error::version $VERSION is not greater than the current version ($CURRENT_VERSION); refusing to downgrade."
+              exit 1
+            fi
+          fi
+
+          # Refuse to start if this version is already in flight or shipped.
+          # Each probe distinguishes "absent" from "errored" (git ls-remote
+          # --exit-code: 0 = ref found, 2 = no match, anything else = the
+          # lookup itself failed) so a transient failure stops the run instead
+          # of being read as "absent" and waving the version through.
+          rc=0; git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1 || rc=$?
+          case "$rc" in
+            0) echo "::error::tag v$VERSION already exists."; exit 1 ;;
+            2) ;;
+            *) echo "::error::git ls-remote for tag v$VERSION failed (exit $rc)."; exit 1 ;;
+          esac
+          rc=0; git ls-remote --exit-code --heads origin "refs/heads/release/v$VERSION" >/dev/null 2>&1 || rc=$?
+          case "$rc" in
+            0) echo "::error::branch release/v$VERSION already exists."; exit 1 ;;
+            2) ;;
+            *) echo "::error::git ls-remote for branch release/v$VERSION failed (exit $rc)."; exit 1 ;;
+          esac
+          if [ -f ".changes/$VERSION.md" ]; then
+            echo "::error::.changes/$VERSION.md already exists on main."; exit 1
+          fi
+          # Must have something to ship (changie fragments are *.yaml; .gitkeep
+          # does not count).
+          shopt -s nullglob
+          fragments=(.changes/unreleased/*.yaml)
+          if [ "${#fragments[@]}" -eq 0 ]; then
+            echo "::error::No unreleased changie fragments to batch."; exit 1
+          fi
+
+      # Pinned (not `latest`) so an unchanged workflow always runs the same
+      # Changie: a new upstream release cannot break a release run or change
+      # the generated changelog without a reviewed bump here. Keep in step with
+      # ci.yml, scripts/install-deps.sh and CONTRIBUTING.md.
+      - name: Install changie
+        uses: miniscruff/changie-action@3223cb29b92a0972dedc864ace3da01e04780ae4 # v3.0.1
+        with:
+          version: v1.25.2
+
+      - name: Batch changelog
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # Batch the explicit version (same semantics as the old tag flow's
+          # `changie batch "$version"`), then rebuild CHANGELOG.md from the
+          # per-version files.
+          changie batch "$VERSION"
+          changie merge
+
+      - name: Open release PR
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add -A .changes CHANGELOG.md
+          git commit -m "chore: release v$VERSION"
+          # Captured before the push so that, once the branch is on the remote,
+          # the only statements ahead of the trap are the function definition
+          # and the trap line itself — nothing that can fail.
+          PUSHED_SHA="$(git rev-parse HEAD)"
+          git push -u origin "$BRANCH"
+
+          # From here the branch exists on the remote. If anything below fails
+          # (e.g. a transient API error in gh pr create) delete it again so the
+          # run stays retryable: the precondition step refuses an existing
+          # release branch, so an orphaned one would block every re-dispatch
+          # until someone deleted it by hand.
+          #
+          # The delete is lease-protected: it only succeeds while the remote
+          # branch still points at the commit this run pushed. A branch that
+          # someone has since moved (or already deleted) is left alone and
+          # reported, never destroyed.
+          cleanup_branch_on_failure() {
+            rc=$?
+            trap - EXIT
+            if [ "$rc" -ne 0 ]; then
+              echo "::warning::opening the release PR failed (exit $rc); deleting $BRANCH so Prepare can be re-dispatched."
+              git push --force-with-lease="refs/heads/$BRANCH:$PUSHED_SHA" origin ":refs/heads/$BRANCH" \
+                || echo "::error::$BRANCH was not deleted: it no longer points at this run's commit ($PUSHED_SHA)," \
+                  "or the delete itself failed. Inspect it, then delete it by hand before re-dispatching."
+            fi
+            exit "$rc"
+          }
+          trap cleanup_branch_on_failure EXIT
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: release v$VERSION" \
+            --body "Automated release PR for **v$VERSION**.
+
+          Merging this PR into \`main\` tags \`v$VERSION\` on the merge commit, builds the release archive, and publishes the GitHub release (release-finalize.yml). Review the batched \`.changes/$VERSION.md\` and \`CHANGELOG.md\` below.
+
+          Generated by the \`Release — Prepare PR\` workflow."

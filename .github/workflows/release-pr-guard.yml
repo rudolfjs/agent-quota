@@ -1,0 +1,80 @@
+name: Release — PR guard
+
+# Pre-merge companion to release-finalize.yml's post-merge monotonic backstop.
+# Runs only on `release/v*` PRs (skipped otherwise) and fails when the PR is
+# inconsistent or stale — its version not strictly greater than the newest
+# .changes/X.Y.Z.md on the base branch. This catches the two-open-release-PRs
+# case at merge time: if the newer version merges first, the older PR goes red
+# on its next synchronize instead of landing a downgraded changelog on main.
+#
+# Base-branch moves alone do NOT re-trigger PR checks — to make this guard
+# binding, mark it as a required status check and enable "require branches to
+# be up to date before merging".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-monotonic:
+    name: Release version
+    # Release PRs are always same-repo branches opened by release-prepare.yml.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the PR head (not the default merge ref: a stale release PR
+      # usually conflicts with main on CHANGELOG.md, in which case the merge
+      # ref does not exist and a default checkout would fail).
+      - name: Check out PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify release PR version is consistent and monotonic
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          version="${HEAD_REF#release/v}"
+          # Same canonical form release-prepare.yml enforces: plain integer
+          # components, no leading zeros. A hand-made release/v1.0.00 branch
+          # would otherwise sort -V after 1.0.0 and pass as "newer".
+          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if ! printf '%s' "$version" | grep -Eq "$SEMVER_RE"; then
+            echo "::error::could not derive canonical X.Y.Z (no zero-padded components) from head ref '$HEAD_REF'"; exit 1
+          fi
+
+          # The PR content must match the branch name — the same consistency
+          # check release-finalize.yml re-asserts post-merge, surfaced here
+          # where it is still cheap to fix.
+          if [ ! -f ".changes/$version.md" ]; then
+            echo "::error::.changes/$version.md missing from the release branch"; exit 1
+          fi
+
+          # Stale-PR guard: the release version must be strictly greater than
+          # the newest released version on the base branch (semver-aware via
+          # GNU sort -V).
+          git fetch --depth 1 origin "refs/heads/$BASE_REF"
+          base_version="$(git ls-tree --name-only FETCH_HEAD .changes/ \
+            | sed -n 's|^\.changes/\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\.md$|\1|p' \
+            | sort -V | tail -n1)"
+          if [ -z "$base_version" ]; then
+            echo "release PR v$version is consistent; $BASE_REF has no released versions yet."
+            exit 0
+          fi
+          if [ "$version" = "$base_version" ]; then
+            echo "::error::release version $version is already released on $BASE_REF — stale release PR."; exit 1
+          fi
+          highest="$(printf '%s\n%s\n' "$version" "$base_version" | sort -V | tail -n1)"
+          if [ "$highest" != "$version" ]; then
+            echo "::error::release version $version is not greater than $BASE_REF's newest release ($base_version) — stale release PR. Close it and re-dispatch 'Release — Prepare PR' with a higher version."
+            exit 1
+          fi
+          echo "release PR v$version is consistent and newer than $BASE_REF (v$base_version)."
