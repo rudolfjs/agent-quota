@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/rudolfjs/agent-quota/internal/credential"
 )
 
 type testKeychain struct {
@@ -104,6 +107,80 @@ func TestExplicitCredentialsPathDisablesKeychain(t *testing.T) {
 	c := New(WithCredentialsPath(filepath.Join(t.TempDir(), "credentials")), WithBackoffPath(filepath.Join(t.TempDir(), "backoff")))
 	if c.credentials.Keychain != nil {
 		t.Fatal("explicit path must stay file-only")
+	}
+}
+
+func TestKeychainAccountNormalization(t *testing.T) {
+	for _, tc := range []struct{ user, want string }{
+		{"first.last_2-admin", "first.last_2-admin"},
+		{"first@example.com", "claude-code-user"},
+		{"DOMAIN\\first", "claude-code-user"},
+		{"first last", "claude-code-user"},
+		{"josé", "claude-code-user"},
+		{"first\n", "claude-code-user"},
+	} {
+		t.Run(tc.user, func(t *testing.T) {
+			t.Setenv("USER", tc.user)
+			_, account := keychainIdentity()
+			if account != tc.want {
+				t.Errorf("account = %q, want %q", account, tc.want)
+			}
+		})
+	}
+}
+
+type missingKeychain struct{}
+
+func (missingKeychain) Exists(context.Context) (bool, error) { return false, nil }
+func (missingKeychain) Read(context.Context) ([]byte, error) { return nil, credential.ErrNotFound }
+
+func TestSecureStorageProfileFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, selector, directory string
+	}{
+		{"selected profile", "profile-b", "profile-b"},
+		{"empty selects default", "", ".claude"},
+		{"normalized profile", "cafe\u0301", "café"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			profileA := filepath.Join(home, "profile-a")
+			t.Setenv("CLAUDE_CONFIG_DIR", profileA)
+			selector := tc.selector
+			if selector != "" {
+				selector = filepath.Join(home, selector)
+			}
+			t.Setenv("CLAUDE_SECURESTORAGE_CONFIG_DIR", selector)
+			if err := os.MkdirAll(profileA, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(profileA, ".credentials.json"), []byte(`{"claudeAiOauth":{"accessToken":"fixture-profile-a"}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := New(WithBackoffPath(filepath.Join(home, "backoff")))
+			c.credentials.Keychain = missingKeychain{}
+			wantPath := filepath.Join(home, tc.directory, ".credentials.json")
+			if c.credPath != wantPath {
+				t.Fatalf("credential path = %q, want %q", c.credPath, wantPath)
+			}
+			if c.Available() {
+				t.Fatal("another profile's file must not make this profile available")
+			}
+			if _, _, err := c.readCredentials(t.Context()); !errors.Is(err, credential.ErrNotFound) {
+				t.Fatal("missing profile must not return another profile's credentials")
+			}
+			if err := os.MkdirAll(filepath.Dir(wantPath), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(wantPath, []byte(`{"claudeAiOauth":{"accessToken":"fixture-selected-profile"}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			creds, keychain, err := c.readCredentials(t.Context())
+			if err != nil || keychain || creds.AccessToken != "fixture-selected-profile" || !c.Available() {
+				t.Fatal("fallback must read the selected profile's file")
+			}
+		})
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/rudolfjs/agent-quota/internal/credential"
@@ -79,12 +80,9 @@ func defaultKeychain() credential.Store {
 
 func keychainIdentity() (service, account string) {
 	service = "Claude Code-credentials"
-	configDir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if secureDir, set := os.LookupEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR"); set {
-		configDir = secureDir
-	}
+	configDir := credentialConfigDir()
 	if configDir != "" {
-		hash := sha256.Sum256([]byte(norm.NFC.String(configDir)))
+		hash := sha256.Sum256([]byte(configDir))
 		service += fmt.Sprintf("-%x", hash[:4])
 	}
 	account = os.Getenv("USER")
@@ -95,18 +93,32 @@ func keychainIdentity() (service, account string) {
 			account = "claude-code-user"
 		}
 	}
+	if !validKeychainAccount.MatchString(account) {
+		account = "claude-code-user"
+	}
 	return service, account
+}
+
+var validKeychainAccount = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// The secure-storage override selects both the Keychain service and the file
+// fallback. A present but empty override selects the default ~/.claude profile.
+func credentialConfigDir() string {
+	if dir, set := os.LookupEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR"); set {
+		return norm.NFC.String(dir)
+	}
+	return norm.NFC.String(os.Getenv("CLAUDE_CONFIG_DIR"))
 }
 
 // DefaultCredentialsPath returns the default path to the Claude credentials file.
 // Returns an error if the user home directory cannot be determined.
 func DefaultCredentialsPath() (string, error) {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+	if dir := credentialConfigDir(); dir != "" {
 		return filepath.Join(dir, ".credentials.json"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory for Claude credentials: %w", err)
 	}
-	return home + "/.claude/.credentials.json", nil
+	return filepath.Join(norm.NFC.String(home), ".claude", ".credentials.json"), nil
 }

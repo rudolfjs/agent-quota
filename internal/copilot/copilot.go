@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -102,7 +103,9 @@ func New(opts ...Option) *Copilot {
 		path, err := DefaultConfigPath()
 		c.configPath = path
 		c.defaultPathErr = err
-		c.keychainFor = copilotKeychain
+		if runtime.GOOS == "darwin" {
+			c.keychainFor = copilotKeychain
+		}
 	}
 	return c
 }

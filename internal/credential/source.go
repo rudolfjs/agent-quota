@@ -24,6 +24,7 @@ type Store interface {
 
 // Source prefers Keychain when configured, falling back to Path only when the
 // item is absent. Explicit provider path overrides use a nil Keychain.
+// An empty Path disables file fallback for providers configured as keyring-only.
 type Source struct {
 	Path     string
 	Label    string
@@ -44,6 +45,9 @@ func (s Source) Read(ctx context.Context) (data []byte, fromKeychain bool, err e
 			return nil, false, err
 		}
 		missing = err
+	}
+	if s.Path == "" {
+		return nil, false, apierrors.NewAuthError(s.Label+" authentication is not configured in the selected credential store", missing)
 	}
 	fileutil.WarnInsecurePermissions(s.Path)
 	data, err = os.ReadFile(s.Path)
@@ -67,6 +71,9 @@ func (s Source) Available(validate func([]byte) bool) bool {
 		if exists || (err != nil && !errors.Is(err, ErrNotFound)) {
 			return true
 		}
+	}
+	if s.Path == "" {
+		return false
 	}
 	fileutil.WarnInsecurePermissions(s.Path)
 	data, err := os.ReadFile(s.Path)

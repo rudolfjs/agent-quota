@@ -105,6 +105,7 @@ type refreshResponse struct {
 // OpenAI implements provider.Provider for ChatGPT/Codex OAuth quota data.
 type OpenAI struct {
 	authPath       string
+	configPath     string // empty for an explicit auth path, which stays file-only
 	credentials    credential.Source
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
@@ -150,6 +151,7 @@ func New(opts ...Option) *OpenAI {
 		o.authPath = path
 		o.defaultPathErr = err
 		if err == nil {
+			o.configPath = filepath.Join(filepath.Dir(path), "config.toml")
 			o.credentials.Keychain = codexKeychain(filepath.Dir(path))
 		}
 	}
@@ -164,7 +166,13 @@ func (o *OpenAI) Available() bool {
 	if o.defaultPathErr != nil {
 		return false
 	}
-	return o.credentials.Available(func(data []byte) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	source, err := o.credentialSource(ctx)
+	if err != nil {
+		return false
+	}
+	return source.Available(func(data []byte) bool {
 		auth, err := parseAuth(data)
 		return err == nil && auth.Tokens.AccessToken != "" && auth.Tokens.RefreshToken != ""
 	})
@@ -174,7 +182,11 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	if o.defaultPathErr != nil {
 		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine OpenAI auth path", o.defaultPathErr)
 	}
-	data, fromKeychain, err := o.credentials.Read(ctx)
+	source, err := o.credentialSource(ctx)
+	if err != nil {
+		return provider.QuotaResult{}, err
+	}
+	data, fromKeychain, err := source.Read(ctx)
 	if err != nil {
 		return provider.QuotaResult{}, err
 	}

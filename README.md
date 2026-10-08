@@ -106,13 +106,15 @@ TUI settings example:
 
 On macOS, `aq` reads existing CLI credentials through Apple's `/usr/bin/security`:
 
-- **Claude Code:** `Claude Code-credentials` (or the CLI's config-directory-specific entry), falling back to `~/.claude/.credentials.json` when the entry is absent.
-- **ChatGPT / Codex:** `Codex Auth`, scoped to `CODEX_HOME` (default `~/.codex`), falling back to `auth.json` when the entry is absent. Codex can still use file storage on macOS.
+- **Claude Code:** `Claude Code-credentials` (or the CLI's config-directory-specific entry), with file fallback in the same credential profile. `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides `CLAUDE_CONFIG_DIR` for both stores; an empty secure-storage override selects `~/.claude`. Account names outside `[a-zA-Z0-9._-]` use the CLI's `claude-code-user` fallback.
+- **ChatGPT / Codex:** follows the root `cli_auth_credentials_store` setting in `CODEX_HOME/config.toml` (default home `~/.codex`). `file` (the default) reads only `auth.json`; `keyring` reads only `Codex Auth`; `auto` prefers Keychain and falls back to `auth.json` when the entry is absent. `ephemeral` has no saved login to read. Only the direct Keychain backend is supported; Codex's encrypted secrets backend and configuration overrides from other layers are not interpreted.
 - **GitHub Copilot CLI:** `copilot-cli`, using the host/login in `~/.copilot/config.json`. Environment tokens and `storeTokenPlaintext` in the adjacent `settings.json` remain supported. The legacy `store_token_plaintext` preference in `config.json` is used only when `settings.json` is absent. Installing `gh` alone does not configure the Copilot CLI provider.
 
 The first password read **may show a macOS permission prompt naming “security”**, depending on the entry's access rules. Choose **Allow** for this request. **Always Allow** may avoid later prompts, but trusts the `security` tool, not exclusively `aq`; prompts can recur when a provider recreates its entry. Already-authorized entries may not prompt at all. Unlock your login Keychain first; unattended/SSH runs cannot approve an interactive dialog.
 
 `aq` only reads these Keychain entries. It never changes their access rules, logs tokens, or copies Keychain credentials into files. Denying access produces an authentication error, not a silent file fallback. Claude refresh still runs the Claude CLI; expired Keychain-backed Codex credentials require `codex login` again. Existing file-backed OpenAI refresh is unchanged.
+
+On Linux, Copilot keeps using environment or file credentials and does not read macOS Keychain preferences from `settings.json`.
 
 ## Development
 

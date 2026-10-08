@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -192,5 +193,48 @@ func TestExplicitConfigPathDisablesKeychain(t *testing.T) {
 	c := New(WithConfigPath(filepath.Join(t.TempDir(), "config.json")))
 	if c.keychainFor != nil {
 		t.Fatal("explicit config path must stay file-only")
+	}
+}
+
+func TestDefaultProviderIgnoresSettingsWithoutKeychain(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS supports Keychain settings")
+	}
+	for _, unreadable := range []bool{false, true} {
+		name := "malformed"
+		if unreadable {
+			name = "unreadable"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			for _, key := range []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
+				t.Setenv(key, "")
+			}
+			c := New()
+			dir := filepath.Dir(c.configPath)
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(c.configPath, []byte(keychainConfig), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			settings := filepath.Join(dir, "settings.json")
+			var err error
+			if unreadable {
+				err = os.Mkdir(settings, 0o700)
+			} else {
+				err = os.WriteFile(settings, []byte(`{invalid`), 0o600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.keychainFor != nil || !c.Available() {
+				t.Fatal("default non-macOS provider must ignore Keychain settings")
+			}
+			token, host, err := c.resolveToken(t.Context(), false)
+			if err != nil || token != "fixture-file-token" || host != "https://github.com" {
+				t.Fatal("invalid settings must not disable valid file credentials")
+			}
+		})
 	}
 }
