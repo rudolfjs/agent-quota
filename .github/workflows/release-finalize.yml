@@ -4,8 +4,9 @@ name: Release — Finalize on merge
 # (squash merge is fine — the squash commit carries .changes/<v>.md). It tests
 # and builds that commit, tags it, and publishes the GitHub release with the
 # linux/amd64 archive, checksums and install.sh. It never pushes to main: all
-# release content already landed via the merged PR. Authorization to release
-# == authorization to merge the PR, which branch protection already gates.
+# release content already landed via the merged PR. Merging only queues this
+# job: the protected `release` environment requires the repository owner's
+# approval before the App credential is exposed or anything is published.
 #
 # Idempotency: the "derive and verify version" step first checks whether a
 # v<version> tag already exists and, if so, requires it to point at this PR's
@@ -50,6 +51,7 @@ jobs:
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'release/v')
+    environment: release
     # One global FIFO queue for every genuine finalize run, across versions.
     # That serialization is what makes the monotonic backstop in "Derive and
     # verify version" sound: two release PRs merged close together would
