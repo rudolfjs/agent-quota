@@ -36,6 +36,9 @@ concurrency:
 
 jobs:
   prepare:
+    # The protected environment requires the repository owner to approve the
+    # run before the App credential is exposed or a release PR is created.
+    environment: release
     runs-on: ubuntu-latest
     steps:
       - name: Generate app token
