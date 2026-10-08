@@ -112,8 +112,6 @@ The first password read **may show a macOS permission prompt naming â€œsecurityâ
 
 `aq` only reads these Keychain entries. It never changes their access rules, logs tokens, or copies Keychain credentials into files. Denying access produces an authentication error, not a silent file fallback. Claude refresh still runs the Claude CLI; expired Keychain-backed Codex credentials require `codex login` again. Existing file-backed OpenAI refresh is unchanged.
 
-See [macOS credential storage](docs/macos-credentials.md) for formats, precedence, limitations, and testing.
-
 ## Development
 
 ```bash

@@ -52,7 +52,7 @@ That covers:
 - installer script shell validation and offline platform/checksum tests
 - CLI build verification
 
-Normal tests never access the real macOS Keychain. See [macOS credential storage](docs/macos-credentials.md#testing) for opt-in, read-only smoke tests and known live-testing limitations.
+Normal tests never access the real macOS Keychain. Read-only live credential smoke tests require `AQ_TEST_LIVE_KEYCHAIN=1` and may prompt for Keychain access.
 
 ## Pull request workflow
 
