@@ -145,6 +145,7 @@ confirm() {
   printf "    binary:   ${BOLD}%s${RESET} %s\n" "$BINARY" "$VERSION"
   printf "    platform: %s / %s\n" "$(pretty_os "$os")" "$(pretty_arch "$arch")"
   printf "    location: ${BOLD}%s/%s${RESET}\n" "$BIN_DIR" "$BINARY"
+  printf "    shortcut: ${BOLD}%s/aq${RESET}\n" "$BIN_DIR"
   printf "\n"
 
   if [ -f "$BIN_DIR/$BINARY" ]; then
@@ -242,13 +243,13 @@ main() {
   install -m 0755 "$binary_path" "$BIN_DIR/$BINARY"
   ok "installed"
 
-  # Symlink aq -> agent-quota
-  ln -sf "$BIN_DIR/$BINARY" "$BIN_DIR/aq"
-  ok "symlinked aq → $BINARY"
+  # A relative symlink works with either an absolute or relative BIN_DIR.
+  ln -sf "$BINARY" "$BIN_DIR/aq"
+  ok "installed aq shortcut → $BINARY"
 
   # Done
   printf "\n"
-  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}%s --help${RESET} (or ${BOLD}aq --help${RESET}) to get started.\n" "$BINARY"
+  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}aq --help${RESET} (or ${BOLD}%s --help${RESET}) to get started.\n" "$BINARY"
   printf "\n"
 
   # Check PATH

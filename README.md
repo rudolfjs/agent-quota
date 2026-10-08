@@ -30,6 +30,8 @@ Use the **same command on Linux and Mac**. The installer automatically detects y
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
 ```
 
+The installer also creates an `aq` shortcut beside `agent-quota`. With `~/.local/bin` on your `PATH`, run `aq` from any shell; no shell alias is needed.
+
 Custom installation options (the same on Linux and Mac):
 
 ```bash
@@ -54,7 +56,7 @@ go build -o agent-quota ./cmd/agent-quota/
 
 ## Usage
 
-`aq` is installed as a short alias for `agent-quota`.
+The installer and `make local-install` create `aq` as a shortcut for `agent-quota`. A direct `go install` or `go build` creates only the `agent-quota` binary.
 
 ```bash
 aq                            # pretty TUI dashboard
@@ -106,7 +108,7 @@ On macOS, `aq` reads existing CLI credentials through Apple's `/usr/bin/security
 
 - **Claude Code:** `Claude Code-credentials` (or the CLI's config-directory-specific entry), falling back to `~/.claude/.credentials.json` when the entry is absent.
 - **ChatGPT / Codex:** `Codex Auth`, scoped to `CODEX_HOME` (default `~/.codex`), falling back to `auth.json` when the entry is absent. Codex can still use file storage on macOS.
-- **GitHub Copilot CLI:** `copilot-cli`, using the host/login in `~/.copilot/config.json`. Environment tokens and the CLI's explicit plaintext-storage preference remain supported. Installing `gh` alone does not configure the Copilot CLI provider.
+- **GitHub Copilot CLI:** `copilot-cli`, using the host/login in `~/.copilot/config.json`. Environment tokens and `storeTokenPlaintext` in the adjacent `settings.json` remain supported. The legacy `store_token_plaintext` preference in `config.json` is used only when `settings.json` is absent. Installing `gh` alone does not configure the Copilot CLI provider.
 
 The first password read **may show a macOS permission prompt naming “security”**, depending on the entry's access rules. Choose **Allow** for this request. **Always Allow** may avoid later prompts, but trusts the `security` tool, not exclusively `aq`; prompts can recur when a provider recreates its entry. Already-authorized entries may not prompt at all. Unlock your login Keychain first; unattended/SSH runs cannot approve an interactive dialog.
 

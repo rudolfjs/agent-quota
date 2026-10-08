@@ -29,7 +29,14 @@ export TEST_ASSETS="$tmp/assets" TEST_REQUESTS="$tmp/requests"
 for target in linux_amd64 darwin_amd64 darwin_arm64; do
   archive="agent-quota_1.2.3_${target}.tar.gz"
   tar -C "$tmp/assets" -czf "$tmp/assets/$archive" package
-  (cd "$tmp/assets" && shasum -a 256 "$archive") >> "$tmp/assets/checksums.txt"
+  (
+    cd "$tmp/assets"
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum "$archive"
+    else
+      shasum -a 256 "$archive"
+    fi
+  ) >> "$tmp/assets/checksums.txt"
 done
 
 for platform in Linux:x86_64:linux_amd64 Darwin:x86_64:darwin_amd64 Darwin:arm64:darwin_arm64; do
@@ -45,8 +52,19 @@ for platform in Linux:x86_64:linux_amd64 Darwin:x86_64:darwin_amd64 Darwin:arm64
   test -x "$tmp/bin-$target/agent-quota"
   test -L "$tmp/bin-$target/aq"
   test "$("$tmp/bin-$target/aq")" = fixture
+  grep -q 'Run aq --help' "$tmp/output"
   printf 'installer %s: OK\n' "$target"
 done
+
+# The aq shortcut must also work with a relative custom installation directory.
+(
+  cd "$tmp"
+  PATH="$tmp/mock:$PATH" YES=1 VERSION=v1.2.3 BIN_DIR=relative-bin \
+    sh "$root/scripts/install.sh" > "$tmp/output"
+  test -L relative-bin/aq
+  test "$(relative-bin/aq)" = fixture
+)
+printf 'installer relative aq shortcut: OK\n'
 
 # Unsupported targets must fail before downloading anything.
 for platform in Linux:arm64 MINGW64_NT:x86_64 Darwin:i386; do

@@ -80,7 +80,7 @@ func (k *keychain) commandError(ctx context.Context, err error) error {
 		switch code {
 		case 44: // errSecItemNotFound (-25300)
 			return apierrors.NewAuthError(k.label+" is not signed in on this machine; sign in with its CLI, then retry", ErrNotFound)
-		case 35, 36, 37, 128: // auth failed, interaction disallowed, unavailable, user cancelled
+		case 51, 36, 53, 128: // auth failed (-25293), interaction disallowed (-25308), unavailable (-25291), user cancelled (-128)
 			return apierrors.NewAuthError("Grant Keychain access for the "+k.label+" entry and unlock your login Keychain, then retry", fmt.Errorf("security exit status %d", code))
 		default:
 			return apierrors.NewConfigError("failed to read "+k.label+" from macOS Keychain", fmt.Errorf("security exit status %d", code))

@@ -206,7 +206,14 @@ func (c *Copilot) resolveToken(ctx context.Context, probe bool) (token, host str
 	if err != nil {
 		return "", "", err
 	}
-	if !cfg.StoreTokenPlaintext && c.keychainFor != nil {
+	plaintext := cfg.StoreTokenPlaintext
+	if c.keychainFor != nil {
+		plaintext, err = readPlaintextPreference(ctx, c.configPath, plaintext)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	if !plaintext && c.keychainFor != nil {
 		users := append([]loggedInUser(nil), cfg.LoggedInUsers...)
 		if cfg.LastLoggedInUser != nil {
 			users = append([]loggedInUser{*cfg.LastLoggedInUser}, users...)

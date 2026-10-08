@@ -50,8 +50,9 @@ func TestKeychainErrorsAreSafe(t *testing.T) {
 		kind    string
 		missing bool
 	}{
-		{44, "auth", true}, {35, "auth", false}, {36, "auth", false},
-		{37, "auth", false}, {128, "auth", false}, {1, "config", false},
+		{44, "auth", true}, {51, "auth", false}, {36, "auth", false},
+		{53, "auth", false}, {128, "auth", false}, {1, "config", false},
+		{35, "config", false}, {37, "config", false},
 	} {
 		k := &keychain{label: "Test", run: func(context.Context, []string) ([]byte, error) {
 			return []byte("secret-stdout"), exitStatus(tc.code)
