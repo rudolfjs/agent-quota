@@ -71,7 +71,7 @@ jobs:
         if: steps.changelog.outputs.mode == 'batch'
         uses: miniscruff/changie-action@v3
         with:
-          version: latest
+          version: v1.25.2
 
       - name: Batch and merge changelog
         if: steps.changelog.outputs.mode == 'batch'
