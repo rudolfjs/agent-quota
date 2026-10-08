@@ -160,6 +160,7 @@ func TestClaude_FetchQuota_missingCreds(t *testing.T) {
 }
 
 func TestClaude_FetchQuota_401_retryOnce(t *testing.T) {
+	t.Setenv("AGENT_QUOTA_CLAUDE_PATH", t.TempDir()+"/missing-claude")
 	var calls atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rudolfjs/agent-quota/internal/credential"
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/provider"
 )
@@ -15,6 +16,7 @@ import (
 // Claude implements provider.Provider for the Anthropic Claude API.
 type Claude struct {
 	credPath       string
+	credentials    credential.Source
 	backoffPath    string
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
@@ -57,6 +59,7 @@ func New(opts ...Option) *Claude {
 	}
 	// Set default credentials path only if not overridden by WithCredentialsPath.
 	if c.credPath == "" {
+		c.credentials.Keychain = defaultKeychain()
 		path, err := DefaultCredentialsPath()
 		c.credPath = path
 		if c.defaultPathErr == nil {
@@ -70,6 +73,8 @@ func New(opts ...Option) *Claude {
 			c.defaultPathErr = err
 		}
 	}
+	c.credentials.Path = c.credPath
+	c.credentials.Label = "Claude"
 	return c
 }
 
@@ -81,8 +86,10 @@ func (c *Claude) Available() bool {
 	if c.defaultPathErr != nil {
 		return false
 	}
-	_, err := ReadCredentials(c.credPath)
-	return err == nil
+	return c.credentials.Available(func(data []byte) bool {
+		creds, err := parseCredentials(data)
+		return err == nil && creds.AccessToken != ""
+	})
 }
 
 // ResetBackoff clears Claude's persisted local rate-limit cooldown.
@@ -127,20 +134,24 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 		}
 	}
 
-	creds, err := ReadCredentials(c.credPath)
+	creds, fromKeychain, err := c.readCredentials(ctx)
 	if err != nil {
-		return provider.QuotaResult{}, apierrors.NewConfigError("failed to read Claude credentials", err)
+		return provider.QuotaResult{}, err
+	}
+	refreshPath := c.credPath
+	if fromKeychain {
+		refreshPath = "" // CLI owns the Keychain update; no file mtime to poll.
 	}
 
 	// Refresh if expired.
 	if creds.IsExpired() {
 		slog.Debug("Claude token expired, attempting refresh")
-		if refreshErr := RefreshToken(ctx, c.credPath); refreshErr != nil {
+		if refreshErr := RefreshToken(ctx, refreshPath); refreshErr != nil {
 			return provider.QuotaResult{}, refreshErr
 		}
-		creds, err = ReadCredentials(c.credPath)
+		creds, _, err = c.readCredentials(ctx)
 		if err != nil {
-			return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", err)
+			return provider.QuotaResult{}, err
 		}
 	}
 
@@ -152,13 +163,13 @@ func (c *Claude) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 			if domErr.Kind == "auth" {
 				// On 401, try one refresh-and-retry cycle.
 				slog.Debug("got 401, attempting token refresh and retry")
-				if refreshErr := RefreshToken(ctx, c.credPath); refreshErr != nil {
+				if refreshErr := RefreshToken(ctx, refreshPath); refreshErr != nil {
 					slog.Debug("token refresh failed", "error", refreshErr)
 					return provider.QuotaResult{}, apierrors.NewAuthError("Claude authentication failed after refresh attempt", refreshErr)
 				}
-				creds, readErr := ReadCredentials(c.credPath)
+				creds, _, readErr := c.readCredentials(ctx)
 				if readErr != nil {
-					return provider.QuotaResult{}, apierrors.NewConfigError("failed to read credentials after refresh", readErr)
+					return provider.QuotaResult{}, readErr
 				}
 				usage, err = apiClient.FetchUsage(ctx, creds.AccessToken)
 				if err != nil {

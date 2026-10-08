@@ -6,8 +6,7 @@ Pretty TUI for humans, headless JSON for scripts and agents.
 
 > **Not for API usage.** This tool reads the OAuth-based subscription quotas exposed by provider CLIs, not API key billing. If you pay per-token via the API, this isn't the tool for you.
 
-> Linux x86_64 only for now.
-> The supported install paths in this repo target Linux x86_64 only. Manual `go build` / `go install` may still work on other platforms, but that is unsupported.
+> Supports Linux x86_64 and macOS Intel / Apple Silicon. On Windows, use WSL2 (x86_64); native PowerShell is unsupported because this tool relies on Unix-style provider CLI credential stores.
 
 ## Quick View Example
 
@@ -15,27 +14,28 @@ Pretty TUI for humans, headless JSON for scripts and agents.
   <img src="docs/img/qexample.png" alt="Agent Quota TUI example" width="717">
 </p>
 
-## Install
+## Install (Linux and Mac)
 
 ### Prebuilt binary
 
 The standard release path is:
-- GitHub Actions builds Linux x86_64 binaries on tagged releases
+- GitHub Actions builds Linux x86_64, macOS Intel (`darwin/amd64`), and macOS Apple Silicon (`darwin/arm64`) binaries
 - GitHub Releases hosts the archives and checksums
-- `install.sh` downloads the correct archive for Linux x86_64
+- `install.sh` detects your platform and downloads the matching archive
+- `aq self-update` uses the same platform archives with SHA-256 verification and atomic replacement
 
-Install the latest Linux x86_64 release into `~/.local/bin`:
+Use the **same command on Linux and Mac**. The installer automatically detects your operating system and architecture (including Intel and Apple Silicon Macs) and installs the latest matching release into `~/.local/bin`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | sh
 ```
 
-Custom installation instructions:
+Custom installation options (the same on Linux and Mac):
 
 ```bash
 # /usr/local/bin
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | BIN_DIR=/usr/local/bin sh
-# Install a specific Linux x86_64 release version:
+# Install a specific release version (Mac archives require a release with macOS support):
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | VERSION=v0.1.1 sh
 # Skip the confirmation prompt:
 curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/install.sh | YES=1 sh
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/rudolfjs/agent-quota/main/scripts/i
 
 ### Install with Go or build from source
 
-This may work outside Linux x86_64 too, but only Linux x86_64 is supported right now.
+Go 1.25+ is required. macOS builds do not require CGO or an additional Keychain library.
 
 ```bash
 # Go
@@ -99,6 +99,20 @@ TUI settings example:
 - Claude: `claude` CLI login (if 429 or 403 errors occur, re-authenticate Claude Code to get a new OAuth token)
 - OpenAI: `codex login`
 - Copilot: `copilot login`
+
+### macOS Keychain access
+
+On macOS, `aq` reads existing CLI credentials through Apple's `/usr/bin/security`:
+
+- **Claude Code:** `Claude Code-credentials` (or the CLI's config-directory-specific entry), falling back to `~/.claude/.credentials.json` when the entry is absent.
+- **ChatGPT / Codex:** `Codex Auth`, scoped to `CODEX_HOME` (default `~/.codex`), falling back to `auth.json` when the entry is absent. Codex can still use file storage on macOS.
+- **GitHub Copilot CLI:** `copilot-cli`, using the host/login in `~/.copilot/config.json`. Environment tokens and the CLI's explicit plaintext-storage preference remain supported. Installing `gh` alone does not configure the Copilot CLI provider.
+
+The first password read **may show a macOS permission prompt naming “security”**, depending on the entry's access rules. Choose **Allow** for this request. **Always Allow** may avoid later prompts, but trusts the `security` tool, not exclusively `aq`; prompts can recur when a provider recreates its entry. Already-authorized entries may not prompt at all. Unlock your login Keychain first; unattended/SSH runs cannot approve an interactive dialog.
+
+`aq` only reads these Keychain entries. It never changes their access rules, logs tokens, or copies Keychain credentials into files. Denying access produces an authentication error, not a silent file fallback. Claude refresh still runs the Claude CLI; expired Keychain-backed Codex credentials require `codex login` again. Existing file-backed OpenAI refresh is unchanged.
+
+See [macOS credential storage](docs/macos-credentials.md) for formats, precedence, limitations, and testing.
 
 ## Development
 

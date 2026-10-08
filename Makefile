@@ -32,6 +32,7 @@ changie-check:
 
 release-check: fmt lint test changie-check
 	sh -n scripts/install.sh
+	sh scripts/test-install.sh
 	sh -n scripts/install-deps.sh
 	go build -o /tmp/$(BINARY) $(CMD)
 
@@ -44,13 +45,10 @@ install-deps:
 ci: release-check
 
 local-install: build
-	@if [ "$$(uname -s)" != "Linux" ]; then \
-		echo "local-install is supported on Linux x86_64 only; build manually on other platforms if you want to experiment" >&2; \
-		exit 1; \
-	fi
-	@if [ "$$(uname -m)" != "x86_64" ] && [ "$$(uname -m)" != "amd64" ]; then \
-		echo "local-install is supported on Linux x86_64 only; build manually on other platforms if you want to experiment" >&2; \
-		exit 1; \
-	fi
+	@case "$$(uname -s)/$$(uname -m)" in \
+		Linux/x86_64|Linux/amd64|Darwin/x86_64|Darwin/arm64) ;; \
+		*) echo "local-install supports Linux x86_64 and macOS Intel/Apple Silicon" >&2; exit 1 ;; \
+	esac
+	mkdir -p $$HOME/.local/bin
 	install -m 0755 $(BINARY) $$HOME/.local/bin/$(BINARY)
 	ln -sf $$HOME/.local/bin/$(BINARY) $$HOME/.local/bin/aq

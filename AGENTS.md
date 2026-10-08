@@ -12,6 +12,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, CI, changie, and release
 - `internal/claude/` — Claude OAuth API client, credential reading, token refresh via CLI
 - `internal/config/` — Configuration, settings, response caching
 - `internal/copilot/` — GitHub Copilot usage provider
+- `internal/credential/` — Read-only macOS Keychain access via `security`, file fallback, metadata-only discovery
 - `internal/errors/` — Domain error types (auth, network, api, config)
 - `internal/fileutil/` — Atomic file writes (0o600 perms), insecure-permission warnings
 - `internal/openai/` — OpenAI usage provider
