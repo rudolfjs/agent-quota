@@ -1,3 +1,0 @@
-kind: Added
-body: Read Claude, Codex, and Copilot CLI credentials from macOS Keychain; ship Intel and Apple Silicon Mac archives with installer and self-update support.
-time: 2026-10-09T08:03:58.944135+10:00
