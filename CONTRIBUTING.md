@@ -115,9 +115,11 @@ Releases are cut from the GitHub web UI; no local tagging is needed.
 
 1. **Prepare** — Actions → **Release — Prepare PR** → *Run workflow*, and enter the version (`X.Y.Z`, no leading `v`). Approve the pending `release` environment deployment. The workflow (`.github/workflows/release-prepare.yml`) checks that the version is newer than the latest `.changes/<version>.md` and that unreleased fragments exist. It then batches them into `.changes/<version>.md`, rebuilds `CHANGELOG.md`, and opens a `release/v<version>` PR.
 2. **Review and merge** — CI and **Release — PR guard** (`release-pr-guard.yml`) run on the PR. The guard checks that the version is still newer than `main`. Review the batched notes, then merge.
-3. **Finalize** — merging queues **Release — Finalize on merge** (`release-finalize.yml`) on the merge commit. Approve its pending `release` environment deployment. It then runs the tests, cross-builds the linux/amd64, darwin/amd64, and darwin/arm64 archives with version injection (CGO disabled), pushes an annotated `v<version>` tag, and publishes the GitHub Release with the changie notes, all three archives, combined checksums, and `install.sh`.
+3. **Finalize** — the merge's push to `main` queues **Release — Finalize on merge** (`release-finalize.yml`). A read-only `detect` job finds the commit that added `.changes/<version>.md` and checks that it is the merge commit of the `release/v<version>` PR. Approve the pending `release` environment deployment. It then runs the tests, builds the linux/amd64 archive with version injection, pushes an annotated `v<version>` tag, and publishes the GitHub Release with the changie notes, archive, checksums, and `install.sh`.
 
 Both release jobs use the protected `release` environment, whose sole required reviewer is the repository owner. Finalize never pushes to `main` and is safe to re-run. If the tag already exists on the merge commit, it only creates the missing release. If the tag points anywhere else, it fails.
+
+Finalize runs on the push to `main`, not on the PR's `closed` event. A `pull_request` job runs on `refs/pull/<n>/merge`, which the `release` environment's `main`-only deployment branch policy rejects. To finalize an already-merged release by hand (for example after a failed or rejected run), use Actions → **Release — Finalize on merge** → *Run workflow* on `main` with the version, or `gh workflow run release-finalize.yml --ref main -f version=X.Y.Z`.
 
 ## CI summary
 
