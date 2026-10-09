@@ -54,6 +54,15 @@ go install github.com/rudolfjs/agent-quota/cmd/agent-quota@latest
 go build -o agent-quota ./cmd/agent-quota/
 ```
 
+### Uninstall
+
+```bash
+aq uninstall         # lists what it will remove, then asks to confirm
+aq uninstall --yes   # skip the prompt
+```
+
+This removes the `agent-quota` binary, the `aq` shortcut beside it, and agent-quota's config and cache directory (`~/.config/agent-quota` on Linux, `~/Library/Application Support/agent-quota` on Mac). Provider credentials (Claude, Codex, and Copilot files and Keychain entries) belong to those CLIs and are not touched. If you installed into a system directory such as `/usr/local/bin`, run it with `sudo`.
+
 ## Usage
 
 The installer and `make local-install` create `aq` as a shortcut for `agent-quota`. A direct `go install` or `go build` creates only the `agent-quota` binary.

@@ -29,14 +29,11 @@ type Settings struct {
 
 // DefaultSettingsPath returns the default path for persisted TUI settings.
 func DefaultSettingsPath() (string, error) {
-	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "agent-quota", "settings.json"), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := primaryDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine settings directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "agent-quota", "settings.json"), nil
+	return filepath.Join(dir, "settings.json"), nil
 }
 
 // LoadSettings reads persisted TUI settings. A missing file is treated as empty settings.

@@ -33,14 +33,11 @@ type Config struct {
 // Prefers XDG config dir; falls back to ~/.config. Returns an error only if
 // neither os.UserConfigDir nor os.UserHomeDir can be determined.
 func DefaultPath() (string, error) {
-	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "agent-quota", "providers.json"), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := primaryDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "agent-quota", "providers.json"), nil
+	return filepath.Join(dir, "providers.json"), nil
 }
 
 // Load reads the config file. A missing file is treated as an empty config.

@@ -18,14 +18,11 @@ type quotaCacheFile struct {
 
 // DefaultQuotaCachePath returns the default path for persisted quota snapshots.
 func DefaultQuotaCachePath() (string, error) {
-	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
-		return filepath.Join(dir, "agent-quota", "quota-cache.json"), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := primaryDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine quota cache directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "agent-quota", "quota-cache.json"), nil
+	return filepath.Join(dir, "quota-cache.json"), nil
 }
 
 // LoadQuotaCache reads persisted successful quota snapshots. A missing file is treated as empty cache.
