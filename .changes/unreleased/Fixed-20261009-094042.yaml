@@ -1,3 +1,0 @@
-kind: Fixed
-body: Honor Codex credential storage settings, keep Claude file fallback in the selected profile with CLI-compatible Keychain accounts, and preserve Linux Copilot file authentication when macOS settings are invalid.
-time: 2026-10-09T09:40:42.55467+10:00

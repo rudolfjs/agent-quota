@@ -1,3 +1,0 @@
-kind: Fixed
-body: Correct macOS Keychain authentication error handling and honor the current Copilot plaintext-storage setting in settings.json.
-time: 2026-10-09T08:45:28.030045+10:00
