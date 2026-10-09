@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tidwall/jsonc"
-
 	"github.com/rudolfjs/agent-quota/internal/credential"
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 )
@@ -36,7 +34,7 @@ func readPlaintextPreference(ctx context.Context, configPath string, legacy bool
 		StoreTokenPlaintext bool `json:"storeTokenPlaintext"`
 	}
 	// Copilot permits comments and trailing commas in user-editable settings.
-	if err := json.Unmarshal(jsonc.ToJSON(data), &settings); err != nil {
+	if err := json.Unmarshal(stripJSONC(data), &settings); err != nil {
 		return false, apierrors.NewConfigError("failed to parse Copilot settings file", errors.New("invalid Copilot settings JSON"))
 	}
 	return settings.StoreTokenPlaintext, nil
