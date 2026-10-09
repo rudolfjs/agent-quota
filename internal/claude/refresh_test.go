@@ -10,14 +10,14 @@ import (
 )
 
 func TestRefreshToken_execFailure_returnsAuthError(t *testing.T) {
-	// Use a fake cred path — the exec will fail because there is no
-	// real "claude" binary in the test environment.
+	// Never invoke a developer's real CLI or change their credentials.
 	dir := t.TempDir()
+	t.Setenv("AGENT_QUOTA_CLAUDE_PATH", dir+"/missing-claude")
 	credPath := dir + "/nonexistent-credentials.json"
 
 	err := claude.RefreshToken(t.Context(), credPath)
 	if err == nil {
-		t.Skip("claude CLI is available in test env; cannot test exec failure")
+		t.Fatal("expected exec failure")
 	}
 
 	var domErr *apierrors.DomainError
@@ -30,12 +30,13 @@ func TestRefreshToken_execFailure_returnsAuthError(t *testing.T) {
 }
 
 func TestRefreshToken_contextCancelled(t *testing.T) {
+	t.Setenv("AGENT_QUOTA_CLAUDE_PATH", "/bin/sh")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel immediately
 
 	err := claude.RefreshToken(ctx, t.TempDir()+"/creds.json")
 	if err == nil {
-		t.Skip("claude CLI succeeded despite cancelled context")
+		t.Fatal("expected cancellation")
 	}
 
 	var domErr *apierrors.DomainError

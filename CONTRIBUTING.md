@@ -49,8 +49,10 @@ That covers:
 - `golangci-lint`
 - `go test -race`
 - changie validation
-- installer script shell validation
+- installer script shell validation and offline platform/checksum tests
 - CLI build verification
+
+Normal tests never access the real macOS Keychain. Read-only live credential smoke tests require `AQ_TEST_LIVE_KEYCHAIN=1` and may prompt for Keychain access.
 
 ## Pull request workflow
 
@@ -113,7 +115,7 @@ Releases are cut from the GitHub web UI; no local tagging is needed.
 
 1. **Prepare** — Actions → **Release — Prepare PR** → *Run workflow*, and enter the version (`X.Y.Z`, no leading `v`). Approve the pending `release` environment deployment. The workflow (`.github/workflows/release-prepare.yml`) checks that the version is newer than the latest `.changes/<version>.md` and that unreleased fragments exist. It then batches them into `.changes/<version>.md`, rebuilds `CHANGELOG.md`, and opens a `release/v<version>` PR.
 2. **Review and merge** — CI and **Release — PR guard** (`release-pr-guard.yml`) run on the PR. The guard checks that the version is still newer than `main`. Review the batched notes, then merge.
-3. **Finalize** — merging queues **Release — Finalize on merge** (`release-finalize.yml`) on the merge commit. Approve its pending `release` environment deployment. It then runs the tests, builds the linux/amd64 archive with version injection, pushes an annotated `v<version>` tag, and publishes the GitHub Release with the changie notes, archive, checksums, and `install.sh`.
+3. **Finalize** — merging queues **Release — Finalize on merge** (`release-finalize.yml`) on the merge commit. Approve its pending `release` environment deployment. It then runs the tests, cross-builds the linux/amd64, darwin/amd64, and darwin/arm64 archives with version injection (CGO disabled), pushes an annotated `v<version>` tag, and publishes the GitHub Release with the changie notes, all three archives, combined checksums, and `install.sh`.
 
 Both release jobs use the protected `release` environment, whose sole required reviewer is the repository owner. Finalize never pushes to `main` and is safe to re-run. If the tag already exists on the merge commit, it only creates the missing release. If the tag points anywhere else, it fails.
 
@@ -121,6 +123,6 @@ Both release jobs use the protected `release` environment, whose sole required r
 
 CI runs on PRs and push-to-main (`.github/workflows/ci.yml`). Three parallel jobs:
 
-- **go-checks** — gofmt, go vet, golangci-lint, test, build, install script syntax
+- **go-checks** — matrix of Linux x86_64, macOS Intel, and macOS Apple Silicon: gofmt, go vet, golangci-lint, race tests, CGO-free build, offline installer tests
 - **lefthook** — runs `pre-commit` and `pre-push` hooks in CI
 - **changie** — PRs touching product code require a changie fragment in `.changes/unreleased/` (Dependabot PRs are exempt)

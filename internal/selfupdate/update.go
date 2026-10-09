@@ -75,9 +75,9 @@ const defaultOwnerRepo = "rudolfjs/agent-quota"
 //  5. Extract the binary into a staging dir.
 //  6. Atomically swap it into the current executable's path.
 func Run(ctx context.Context, opts Options) (*Result, error) {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+	if !supportedPlatform(runtime.GOOS, runtime.GOARCH) {
 		return nil, apierrors.NewConfigError(
-			fmt.Sprintf("self-update only supports linux/amd64 today, not %s/%s", runtime.GOOS, runtime.GOARCH),
+			fmt.Sprintf("self-update supports Linux x86_64 and macOS Intel/Apple Silicon, not %s/%s", runtime.GOOS, runtime.GOARCH),
 			errors.New("unsupported platform"),
 		)
 	}
@@ -171,6 +171,11 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	result.InstalledPath = dst
 	printf(out, "updated to %s\n", rel.TagName)
 	return result, nil
+}
+
+func supportedPlatform(goos, goarch string) bool {
+	return (goos == "linux" && goarch == "amd64") ||
+		(goos == "darwin" && (goarch == "amd64" || goarch == "arm64"))
 }
 
 func pickRelease(ctx context.Context, client *ReleaseClient, allowPre bool) (*Release, error) {

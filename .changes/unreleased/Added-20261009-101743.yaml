@@ -1,0 +1,3 @@
+kind: Added
+body: Add `aq uninstall` to remove the binary, the `aq` shortcut, and agent-quota config on Linux and Mac, leaving provider credentials untouched.
+time: 2026-10-09T10:17:43.113119+10:00

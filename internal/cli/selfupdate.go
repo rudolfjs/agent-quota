@@ -27,7 +27,7 @@ Flags:
   --force   reinstall even if the current version matches the latest release
   --pre     consider prerelease tags (default: stable only)
 
-Only linux/amd64 is supported today.`,
+Supports Linux x86_64 and macOS Intel/Apple Silicon.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := selfupdate.Run(cmd.Context(), selfupdate.Options{
 				CurrentVersion:  extractVersionCore(version.String()),

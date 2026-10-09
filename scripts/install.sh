@@ -74,14 +74,16 @@ download() {
 detect_os() {
   case $(uname -s) in
     Linux)  echo linux ;;
-    *)      fail "unsupported operating system: $(uname -s) (Linux x86_64 only)" ;;
+    Darwin) echo darwin ;;
+    *)      fail "unsupported operating system: $(uname -s) (Linux x86_64 or macOS required; use WSL2 on Windows)" ;;
   esac
 }
 
 detect_arch() {
   case $(uname -m) in
     x86_64|amd64)   echo amd64 ;;
-    *)              fail "unsupported architecture: $(uname -m) (Linux x86_64 only)" ;;
+    arm64|aarch64)  echo arm64 ;;
+    *)             fail "unsupported architecture: $(uname -m)" ;;
   esac
 }
 
@@ -96,6 +98,7 @@ pretty_os() {
 pretty_arch() {
   case $1 in
     amd64) printf "x86_64 (Intel/AMD)" ;;
+    arm64) printf "arm64 (Apple Silicon)" ;;
     *)     printf "%s" "$1" ;;
   esac
 }
@@ -142,6 +145,7 @@ confirm() {
   printf "    binary:   ${BOLD}%s${RESET} %s\n" "$BINARY" "$VERSION"
   printf "    platform: %s / %s\n" "$(pretty_os "$os")" "$(pretty_arch "$arch")"
   printf "    location: ${BOLD}%s/%s${RESET}\n" "$BIN_DIR" "$BINARY"
+  printf "    shortcut: ${BOLD}%s/aq${RESET}\n" "$BIN_DIR"
   printf "\n"
 
   if [ -f "$BIN_DIR/$BINARY" ]; then
@@ -178,6 +182,10 @@ main() {
   info "detecting platform..."
   os=$(detect_os)
   arch=$(detect_arch)
+  case "$os/$arch" in
+    linux/amd64|darwin/amd64|darwin/arm64) ;;
+    *) fail "unsupported platform: $os/$arch (Linux x86_64 or macOS Intel/Apple Silicon required)" ;;
+  esac
   ok "$(pretty_os "$os") / $(pretty_arch "$arch")"
 
   # Resolve version
@@ -235,13 +243,13 @@ main() {
   install -m 0755 "$binary_path" "$BIN_DIR/$BINARY"
   ok "installed"
 
-  # Symlink aq -> agent-quota
-  ln -sf "$BIN_DIR/$BINARY" "$BIN_DIR/aq"
-  ok "symlinked aq → $BINARY"
+  # A relative symlink works with either an absolute or relative BIN_DIR.
+  ln -sf "$BINARY" "$BIN_DIR/aq"
+  ok "installed aq shortcut → $BINARY"
 
   # Done
   printf "\n"
-  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}%s --help${RESET} (or ${BOLD}aq --help${RESET}) to get started.\n" "$BINARY"
+  printf "  ${GREEN}${BOLD}Done!${RESET} Run ${BOLD}aq --help${RESET} (or ${BOLD}%s --help${RESET}) to get started.\n" "$BINARY"
   printf "\n"
 
   # Check PATH

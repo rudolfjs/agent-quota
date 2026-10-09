@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/rudolfjs/agent-quota/internal/credential"
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/fileutil"
 	"github.com/rudolfjs/agent-quota/internal/provider"
@@ -31,9 +33,10 @@ const (
 var errTokenNotConfigured = errors.New("copilot token not configured")
 
 type configFile struct {
-	LastLoggedInUser *loggedInUser     `json:"last_logged_in_user,omitempty"`
-	LoggedInUsers    []loggedInUser    `json:"logged_in_users,omitempty"`
-	CopilotTokens    map[string]string `json:"copilot_tokens,omitempty"`
+	LastLoggedInUser    *loggedInUser     `json:"last_logged_in_user,omitempty"`
+	LoggedInUsers       []loggedInUser    `json:"logged_in_users,omitempty"`
+	CopilotTokens       map[string]string `json:"copilot_tokens,omitempty"`
+	StoreTokenPlaintext bool              `json:"store_token_plaintext,omitempty"`
 }
 
 type loggedInUser struct {
@@ -63,6 +66,7 @@ type quotaSnapshot struct {
 // Copilot implements provider.Provider for GitHub Copilot CLI quota data.
 type Copilot struct {
 	configPath     string
+	keychainFor    func(host, login string) credential.Store
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	baseURL        string
@@ -99,6 +103,9 @@ func New(opts ...Option) *Copilot {
 		path, err := DefaultConfigPath()
 		c.configPath = path
 		c.defaultPathErr = err
+		if runtime.GOOS == "darwin" {
+			c.keychainFor = copilotKeychain
+		}
 	}
 	return c
 }
@@ -106,14 +113,19 @@ func New(opts ...Option) *Copilot {
 func (c *Copilot) Name() string { return "copilot" }
 
 func (c *Copilot) Available() bool {
-	_, _, err := c.resolveToken()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, _, err := c.resolveToken(ctx, true)
 	return err == nil
 }
 
 func (c *Copilot) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
-	token, host, err := c.resolveToken()
+	token, host, err := c.resolveToken(ctx, false)
 	if err != nil {
+		var domErr *apierrors.DomainError
 		switch {
+		case errors.As(err, &domErr):
+			return provider.QuotaResult{}, err
 		case errors.Is(err, errTokenNotConfigured):
 			slog.Debug("copilot token not configured", "error", err)
 			return provider.QuotaResult{}, apierrors.NewAuthError("Copilot authentication is not configured", err)
@@ -179,7 +191,7 @@ func (c *Copilot) fetchUser(ctx context.Context, baseURL, token string) (*userRe
 	return &usage, nil
 }
 
-func (c *Copilot) resolveToken() (token, host string, err error) {
+func (c *Copilot) resolveToken(ctx context.Context, probe bool) (token, host string, err error) {
 	for _, name := range []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			return value, "", nil
@@ -196,6 +208,52 @@ func (c *Copilot) resolveToken() (token, host string, err error) {
 	cfg, err := readConfig(c.configPath)
 	if err != nil {
 		return "", "", err
+	}
+	plaintext := cfg.StoreTokenPlaintext
+	if c.keychainFor != nil {
+		plaintext, err = readPlaintextPreference(ctx, c.configPath, plaintext)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	if !plaintext && c.keychainFor != nil {
+		users := append([]loggedInUser(nil), cfg.LoggedInUsers...)
+		if cfg.LastLoggedInUser != nil {
+			users = append([]loggedInUser{*cfg.LastLoggedInUser}, users...)
+		}
+		seen := make(map[loggedInUser]bool)
+		for _, user := range users {
+			if user.Host == "" || user.Login == "" || seen[user] {
+				continue
+			}
+			seen[user] = true
+			store := c.keychainFor(user.Host, user.Login)
+			if store == nil { // non-macOS
+				break
+			}
+			if probe {
+				exists, err := store.Exists(ctx)
+				if exists || (err != nil && !errors.Is(err, credential.ErrNotFound)) {
+					return "keychain", user.Host, nil // no secret read during discovery
+				}
+			} else {
+				data, err := store.Read(ctx)
+				if err == nil {
+					token := strings.TrimSpace(string(data))
+					if token == "" {
+						return "", "", apierrors.NewAuthError("Copilot Keychain token is empty; run `copilot login` again", nil)
+					}
+					return token, user.Host, nil
+				}
+				if !errors.Is(err, credential.ErrNotFound) {
+					return "", "", err
+				}
+			}
+			// Match the CLI's per-account file fallback before another user.
+			if token := cfg.CopilotTokens[user.Host+":"+user.Login]; strings.TrimSpace(token) != "" {
+				return token, user.Host, nil
+			}
+		}
 	}
 	if token, host, ok := cfg.selectedToken(); ok {
 		return token, host, nil

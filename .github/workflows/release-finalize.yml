@@ -3,7 +3,7 @@ name: Release — Finalize on merge
 # Second half of the release. Fires when a `release/v*` PR is merged into main
 # (squash merge is fine — the squash commit carries .changes/<v>.md). It tests
 # and builds that commit, tags it, and publishes the GitHub release with the
-# linux/amd64 archive, checksums and install.sh. It never pushes to main: all
+# Linux and macOS archives, checksums and install.sh. It never pushes to main: all
 # release content already landed via the merged PR. Merging only queues this
 # job: the protected `release` environment requires the repository owner's
 # approval before the App credential is exposed or anything is published.
@@ -232,7 +232,7 @@ jobs:
           sh -n scripts/install.sh
           go test -race -count=1 ./...
 
-      - name: Build archive and checksums
+      - name: Build Linux and macOS archives and checksums
         if: steps.v.outputs.do_release == 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
@@ -241,22 +241,25 @@ jobs:
 
           tag="v$VERSION"
           short_commit=$(git rev-parse --short HEAD)
-          name="agent-quota_${VERSION}_linux_amd64"
-          package_dir="dist/$name"
+          # Keep all builds inside the serialized, approved finalize job.
+          # security(1) is used at runtime on macOS, so no CGO SDK is needed.
+          for target in linux/amd64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            name="agent-quota_${VERSION}_${os}_${arch}"
+            package_dir="dist/$name"
+            mkdir -p "$package_dir"
 
-          mkdir -p "$package_dir"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go build \
+              -trimpath \
+              -ldflags="-s -w -X github.com/rudolfjs/agent-quota/internal/version.buildVersion=$tag -X github.com/rudolfjs/agent-quota/internal/version.buildCommit=$short_commit" \
+              -o "$package_dir/agent-quota" \
+              ./cmd/agent-quota/
 
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-            go build \
-            -trimpath \
-            -ldflags="-s -w -X github.com/rudolfjs/agent-quota/internal/version.buildVersion=$tag -X github.com/rudolfjs/agent-quota/internal/version.buildCommit=$short_commit" \
-            -o "$package_dir/agent-quota" \
-            ./cmd/agent-quota/
-
-          cp LICENSE "$package_dir/"
-          cp README.md "$package_dir/"
-
-          tar -C dist -czf "dist/${name}.tar.gz" "$name"
+            cp LICENSE README.md "$package_dir/"
+            tar -C dist -czf "dist/${name}.tar.gz" "$name"
+          done
           (cd dist && sha256sum -- *.tar.gz > checksums.txt)
 
       - name: Tag the release commit

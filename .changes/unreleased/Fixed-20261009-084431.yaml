@@ -1,0 +1,3 @@
+kind: Fixed
+body: Keep the aq installer shortcut working with relative installation paths and make the short command prominent in installation guidance.
+time: 2026-10-09T08:44:31.966083+10:00

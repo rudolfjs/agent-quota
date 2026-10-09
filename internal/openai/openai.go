@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/rudolfjs/agent-quota/internal/credential"
 	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
 	"github.com/rudolfjs/agent-quota/internal/fileutil"
 	"github.com/rudolfjs/agent-quota/internal/provider"
@@ -103,6 +105,8 @@ type refreshResponse struct {
 // OpenAI implements provider.Provider for ChatGPT/Codex OAuth quota data.
 type OpenAI struct {
 	authPath       string
+	configPath     string // empty for an explicit auth path, which stays file-only
+	credentials    credential.Source
 	defaultPathErr error // non-nil when home dir lookup failed and no explicit path was given
 	httpClient     *http.Client
 	usageURL       string
@@ -146,7 +150,13 @@ func New(opts ...Option) *OpenAI {
 		path, err := DefaultAuthPath()
 		o.authPath = path
 		o.defaultPathErr = err
+		if err == nil {
+			o.configPath = filepath.Join(filepath.Dir(path), "config.toml")
+			o.credentials.Keychain = codexKeychain(filepath.Dir(path))
+		}
 	}
+	o.credentials.Path = o.authPath
+	o.credentials.Label = "OpenAI"
 	return o
 }
 
@@ -156,20 +166,33 @@ func (o *OpenAI) Available() bool {
 	if o.defaultPathErr != nil {
 		return false
 	}
-	auth, err := readAuthFile(o.authPath)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	source, err := o.credentialSource(ctx)
 	if err != nil {
 		return false
 	}
-	return auth.Tokens.AccessToken != "" && auth.Tokens.RefreshToken != ""
+	return source.Available(func(data []byte) bool {
+		auth, err := parseAuth(data)
+		return err == nil && auth.Tokens.AccessToken != "" && auth.Tokens.RefreshToken != ""
+	})
 }
 
 func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 	if o.defaultPathErr != nil {
 		return provider.QuotaResult{}, apierrors.NewConfigError("cannot determine OpenAI auth path", o.defaultPathErr)
 	}
-	auth, err := readAuthFile(o.authPath)
+	source, err := o.credentialSource(ctx)
 	if err != nil {
-		return provider.QuotaResult{}, apierrors.NewConfigError("failed to read OpenAI auth", err)
+		return provider.QuotaResult{}, err
+	}
+	data, fromKeychain, err := source.Read(ctx)
+	if err != nil {
+		return provider.QuotaResult{}, err
+	}
+	auth, err := parseAuth(data)
+	if err != nil {
+		return provider.QuotaResult{}, err
 	}
 	if auth.Tokens.AccessToken == "" {
 		return provider.QuotaResult{}, apierrors.NewAuthError("OpenAI authentication is not configured", fmt.Errorf("missing access token"))
@@ -182,6 +205,12 @@ func (o *OpenAI) FetchQuota(ctx context.Context) (provider.QuotaResult, error) {
 			return provider.QuotaResult{}, err
 		}
 
+		// Never rotate a Keychain refresh token unless it can be persisted back
+		// to its owner. This app is a read-only Keychain client; Codex must
+		// renew its own login. In particular, do not create auth.json here.
+		if fromKeychain {
+			return provider.QuotaResult{}, apierrors.NewAuthError("OpenAI authentication expired; run `codex login` again to update Keychain", err)
+		}
 		if auth.Tokens.RefreshToken == "" {
 			return provider.QuotaResult{}, apierrors.NewAuthError("OpenAI authentication expired; run `codex login` again", err)
 		}
@@ -470,15 +499,10 @@ func normalizePrefix(value string) string {
 	return result
 }
 
-func readAuthFile(path string) (authFile, error) {
-	fileutil.WarnInsecurePermissions(path)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return authFile{}, fmt.Errorf("read auth file: %w", err)
-	}
+func parseAuth(data []byte) (authFile, error) {
 	var auth authFile
 	if err := json.Unmarshal(data, &auth); err != nil {
-		return authFile{}, fmt.Errorf("parse auth file: %w", err)
+		return authFile{}, apierrors.NewConfigError("failed to parse OpenAI credentials", errors.New("invalid credential JSON"))
 	}
 	return auth, nil
 }
@@ -497,6 +521,9 @@ func writeAuthFile(path string, auth authFile) error {
 // DefaultAuthPath returns the default path to the OpenAI/Codex auth file.
 // Returns an error if the user home directory cannot be determined.
 func DefaultAuthPath() (string, error) {
+	if dir := os.Getenv("CODEX_HOME"); dir != "" {
+		return filepath.Join(dir, "auth.json"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory for OpenAI auth: %w", err)

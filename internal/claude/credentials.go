@@ -1,12 +1,20 @@
 package claude
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
+	"regexp"
 	"time"
 
-	"github.com/rudolfjs/agent-quota/internal/fileutil"
+	"github.com/rudolfjs/agent-quota/internal/credential"
+	apierrors "github.com/rudolfjs/agent-quota/internal/errors"
+	"golang.org/x/text/unicode/norm"
 )
 
 // credentialsFile mirrors the structure of ~/.claude/.credentials.json.
@@ -37,24 +45,80 @@ func (c OAuthCredentials) IsExpired() bool {
 // ReadCredentials reads and parses OAuth credentials from the given file path.
 // Returns a domain-safe error (wrapping the raw cause) on any failure.
 func ReadCredentials(path string) (OAuthCredentials, error) {
-	fileutil.WarnInsecurePermissions(path)
-	data, err := os.ReadFile(path)
+	data, _, err := (credential.Source{Path: path, Label: "Claude"}).Read(context.Background())
 	if err != nil {
-		return OAuthCredentials{}, fmt.Errorf("read credentials file: %w", err)
+		return OAuthCredentials{}, err
 	}
+	return parseCredentials(data)
+}
+
+func parseCredentials(data []byte) (OAuthCredentials, error) {
 	var f credentialsFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return OAuthCredentials{}, fmt.Errorf("parse credentials file: %w", err)
+		// JSON type errors can contain credential values; discard the raw error.
+		return OAuthCredentials{}, apierrors.NewConfigError("failed to parse Claude credentials", errors.New("invalid credential JSON"))
 	}
 	return f.ClaudeAIOAuth, nil
+}
+
+func (c *Claude) readCredentials(ctx context.Context) (OAuthCredentials, bool, error) {
+	data, fromKeychain, err := c.credentials.Read(ctx)
+	if err != nil {
+		return OAuthCredentials{}, false, err
+	}
+	creds, err := parseCredentials(data)
+	if err == nil && creds.AccessToken == "" {
+		err = apierrors.NewAuthError("Claude authentication is not configured; run `claude` to sign in", nil)
+	}
+	return creds, fromKeychain, err
+}
+
+func defaultKeychain() credential.Store {
+	service, account := keychainIdentity()
+	return credential.NewKeychain(service, account, "Claude Code")
+}
+
+func keychainIdentity() (service, account string) {
+	service = "Claude Code-credentials"
+	configDir := credentialConfigDir()
+	if configDir != "" {
+		hash := sha256.Sum256([]byte(configDir))
+		service += fmt.Sprintf("-%x", hash[:4])
+	}
+	account = os.Getenv("USER")
+	if account == "" {
+		if current, err := user.Current(); err == nil {
+			account = current.Username
+		} else {
+			account = "claude-code-user"
+		}
+	}
+	if !validKeychainAccount.MatchString(account) {
+		account = "claude-code-user"
+	}
+	return service, account
+}
+
+var validKeychainAccount = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// The secure-storage override selects both the Keychain service and the file
+// fallback. A present but empty override selects the default ~/.claude profile.
+func credentialConfigDir() string {
+	if dir, set := os.LookupEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR"); set {
+		return norm.NFC.String(dir)
+	}
+	return norm.NFC.String(os.Getenv("CLAUDE_CONFIG_DIR"))
 }
 
 // DefaultCredentialsPath returns the default path to the Claude credentials file.
 // Returns an error if the user home directory cannot be determined.
 func DefaultCredentialsPath() (string, error) {
+	if dir := credentialConfigDir(); dir != "" {
+		return filepath.Join(dir, ".credentials.json"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory for Claude credentials: %w", err)
 	}
-	return home + "/.claude/.credentials.json", nil
+	return filepath.Join(norm.NFC.String(home), ".claude", ".credentials.json"), nil
 }

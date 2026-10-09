@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   go-checks:
-    name: Go checks
-    runs-on: ubuntu-latest
+    name: Go checks (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out code
@@ -32,8 +36,10 @@ jobs:
             exit 1
           fi
 
-      - name: Check installer script syntax
-        run: sh -n scripts/install.sh
+      - name: Check installer
+        run: |
+          sh -n scripts/install.sh
+          sh scripts/test-install.sh
 
       - name: Run go vet
         run: go vet ./...
@@ -48,7 +54,9 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Build CLI
-        run: go build -o /tmp/agent-quota ./cmd/agent-quota/
+        run: |
+          CGO_ENABLED=0 go build -o /tmp/agent-quota ./cmd/agent-quota/
+          /tmp/agent-quota --version
 
       - name: Verify installer script is executable
         run: test -x scripts/install.sh

@@ -132,6 +132,7 @@ func main() {
 
 	rootCmd.AddCommand(cli.NewStatusCommand(registry))
 	rootCmd.AddCommand(cli.NewSelfUpdateCommand())
+	rootCmd.AddCommand(cli.NewUninstallCommand())
 
 	if err := fang.Execute(ctx, rootCmd, fang.WithVersion(version.String())); err != nil {
 		os.Exit(1)

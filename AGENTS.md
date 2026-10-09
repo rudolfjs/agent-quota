@@ -7,17 +7,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, CI, changie, and release
 ## Architecture
 
 - `cmd/agent-quota/` — entrypoint, root command + flags, wires cobra + fang, registers providers
-- `internal/cli/` — subcommands (status, self-update), flag helpers, output mode resolution
+- `internal/cli/` — subcommands (status, self-update, uninstall), flag helpers, output mode resolution
 - `internal/provider/` — Provider interface, registry, domain types (QuotaResult, Window, ExtraUsage)
 - `internal/claude/` — Claude OAuth API client, credential reading, token refresh via CLI
 - `internal/config/` — Configuration, settings, response caching
 - `internal/copilot/` — GitHub Copilot usage provider
+- `internal/credential/` — Read-only macOS Keychain access via `security`, file fallback, metadata-only discovery
 - `internal/errors/` — Domain error types (auth, network, api, config)
 - `internal/fileutil/` — Atomic file writes (0o600 perms), insecure-permission warnings
 - `internal/openai/` — OpenAI usage provider
 - `internal/tui/` — Bubbletea v2 TUI model, provider cards, lipgloss styles
 - `internal/output/` — JSON and text formatters for headless mode
-- `internal/selfupdate/` — GitHub release lookup, semver compare, sha256-verified binary install
+- `internal/selfupdate/` — GitHub release lookup, semver compare, sha256-verified binary install, uninstall
 - `internal/version/` — Build-time version injection, claude CLI version detection
 
 ### Adding a New Provider
