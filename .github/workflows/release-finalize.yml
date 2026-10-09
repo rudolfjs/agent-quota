@@ -3,14 +3,31 @@ name: Release — Finalize on merge
 # Second half of the release. Fires when a `release/v*` PR is merged into main
 # (squash merge is fine — the squash commit carries .changes/<v>.md). It tests
 # and builds that commit, tags it, and publishes the GitHub release with the
-# Linux and macOS archives, checksums and install.sh. It never pushes to main: all
+# linux/amd64 archive, checksums and install.sh. It never pushes to main: all
 # release content already landed via the merged PR. Merging only queues this
 # job: the protected `release` environment requires the repository owner's
 # approval before the App credential is exposed or anything is published.
 #
-# Idempotency: the "derive and verify version" step first checks whether a
-# v<version> tag already exists and, if so, requires it to point at this PR's
-# merge commit — a foreign tag is a hard failure in every state, never
+# Trigger: the push of the merge to main, not the PR's `closed` event. A
+# pull_request job runs on refs/pull/<n>/merge, which the `release`
+# environment's deployment branch policy (main only) rejects before the job
+# starts — there is no bypass for it. A push to main (and a manual dispatch
+# from main) runs on refs/heads/main and satisfies the policy unchanged.
+#
+# Gate: the `detect` job (no environment, read-only) decides whether a push is
+# a release. The release commit is the newest first-parent commit on main that
+# added .changes/<v>.md, and it must be the merge commit of a merged
+# same-repo `release/v<v>` PR into main — the same provenance the old
+# pull_request gate checked. Pushes that add no .changes/X.Y.Z.md skip
+# finalize; anything inconsistent fails closed.
+#
+# Recovery: Actions -> "Release — Finalize on merge" -> Run workflow on main
+# with the version re-runs detect + finalize for an already-merged release PR
+# (e.g. one whose finalize failed or was rejected).
+#
+# Idempotency: the "verify version state" step first checks whether a
+# v<version> tag already exists and, if so, requires it to point at the
+# release commit — a foreign tag is a hard failure in every state, never
 # something to build a release on or to skip past. It then distinguishes three
 # states so a re-run (e.g. after a transient failure) does the right thing
 # instead of either erroring out or double-publishing:
@@ -23,9 +40,18 @@ name: Release — Finalize on merge
 # being read as "absent".
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
+    # Only pushes that touch a released-version file can be a release; every
+    # other push to main never starts this workflow.
+    paths:
+      - ".changes/*.md"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Already-merged release to finalize, no leading v (e.g. 0.3.0). Run from main."
+        required: true
+        type: string
 
 # Least-privilege: the default GITHUB_TOKEN stays read-only at the workflow
 # level; the finalize job elevates to contents:write as belt-and-suspenders for
@@ -34,42 +60,129 @@ on:
 permissions:
   contents: read
 
-# Concurrency is declared on the job, not the workflow: every closed PR on
-# main enters this workflow before the job-level `if` gate, so a workflow-level
-# group would either be per-branch (leaving finalize runs for different
-# versions free to race each other) or global (putting every unrelated
-# PR-close event into the release queue). See `finalize.concurrency`.
+# Concurrency is declared on the finalize job, not the workflow: a
+# workflow-level group would also queue pushes that turn out not to be
+# releases. See `finalize.concurrency`.
 
 jobs:
+  detect:
+    name: Detect release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Read the PR associated with the release commit (provenance check).
+      pull-requests: read
+    outputs:
+      version: ${{ steps.detect.outputs.version }}
+      release_sha: ${{ steps.detect.outputs.release_sha }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find the release commit and verify its PR
+        id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          INPUT_VERSION: ${{ inputs.version }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Same canonical form release-prepare.yml and the PR guard enforce:
+          # plain integer components, no leading zeros. Re-checked here so a
+          # zero-padded version (1.0.00) can never reach tagging even when
+          # this post-merge backstop is the only guard that ran.
+          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::finalize only runs from main (got $REF)."; exit 1
+          fi
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+          else
+            # Versions this push added. A force-push or first push leaves
+            # BEFORE unusable; fall back to the pushed commit's first parent.
+            if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              BEFORE="$SHA^1"
+            fi
+            # Loose pattern so a zero-padded file is still caught (and then
+            # rejected by SEMVER_RE) rather than silently ignored.
+            added="$(git diff --name-only --diff-filter=A "$BEFORE" "$SHA" -- .changes/ \
+              | sed -n 's|^\.changes/\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\.md$|\1|p')"
+            count="$(printf '%s' "$added" | grep -c . || true)"
+            if [ "$count" -eq 0 ]; then
+              echo "::notice::push adds no .changes/X.Y.Z.md — not a release, nothing to finalize."
+              exit 0
+            fi
+            if [ "$count" -ne 1 ]; then
+              echo "::error::push adds more than one released version ($(echo $added)); finalize each by hand via workflow_dispatch."
+              exit 1
+            fi
+            version="$added"
+          fi
+
+          if ! printf '%s' "$version" | grep -Eq "$SEMVER_RE"; then
+            echo "::error::version must be canonical X.Y.Z (no leading v, no zero-padded components). Got: '$version'"; exit 1
+          fi
+
+          # The release commit is the newest first-parent commit on main that
+          # added .changes/<v>.md (first-parent, so commits inside a merged
+          # branch never count — only what landed on main itself).
+          release_sha="$(git log --first-parent --diff-filter=A --format=%H -n1 "$SHA" -- ".changes/$version.md")"
+          if [ -z "$release_sha" ]; then
+            echo "::error::no commit on main adds .changes/$version.md."; exit 1
+          fi
+          if ! git cat-file -e "$SHA:.changes/$version.md" 2>/dev/null; then
+            echo "::error::.changes/$version.md no longer exists on main."; exit 1
+          fi
+
+          # Provenance: the release commit must be the merge commit of a
+          # merged, same-repo release/v<version> PR into main. Release PRs are
+          # always opened by release-prepare.yml, so a hand-pushed changelog
+          # or a fork PR with a crafted branch name never gets past here. The
+          # API call fails the step on error (fail closed).
+          prs="$(gh api "repos/$REPO/commits/$release_sha/pulls")"
+          match="$(printf '%s' "$prs" | jq -r \
+            --arg sha "$release_sha" --arg head "release/v$version" --arg repo "$REPO" \
+            '[.[] | select(.merged_at != null and .merge_commit_sha == $sha
+                           and .base.ref == "main" and .head.ref == $head
+                           and .head.repo.full_name == $repo)] | .[0].number // empty')"
+          if [ -z "$match" ]; then
+            echo "::error::$release_sha (adds .changes/$version.md) is not the merge commit of a merged release/v$version PR into main. Refusing to release."
+            exit 1
+          fi
+
+          echo "::notice::release v$version: commit $release_sha from PR #$match."
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
   finalize:
     name: Finalize release
-    # Only act on a merged (not just closed) release PR, and only when the head
-    # branch lives in this repo — release PRs are always same-repo (opened by
-    # release-prepare.yml), so a fork PR with a crafted `release/v*` branch name
-    # never gets past this gate.
-    if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.event.pull_request.head.ref, 'release/v')
+    needs: detect
+    if: needs.detect.outputs.version != ''
     environment: release
     # One global FIFO queue for every genuine finalize run, across versions.
-    # That serialization is what makes the monotonic backstop in "Derive and
-    # verify version" sound: two release PRs merged close together would
+    # That serialization is what makes the monotonic backstop in "Verify
+    # version state" sound: two release PRs merged close together would
     # otherwise both probe the same old tag set, and the older version could
     # still tag and publish last. `queue: max` keeps up to 100 pending runs
     # instead of the default one, so a newly queued finalize can never cancel
     # a pending one — at worst it waits its turn.
     #
-    # The group expression repeats the `if` gate: only a merged, same-repo
-    # `release/v*` event can name the shared group; every other closed-PR
-    # event (all skipped above) gets a run-unique group of its own, so
-    # unrelated PRs and fork PRs with a crafted `release/v*` head can neither
-    # displace a queued release nor fill its queue.
+    # The group expression repeats the `if` gate: only a detected release can
+    # name the shared group; every other run gets a run-unique group of its
+    # own, so it can neither displace a queued release nor fill its queue.
     concurrency:
       group: >-
-        ${{ (github.event.pull_request.merged == true &&
-             github.event.pull_request.head.repo.full_name == github.repository &&
-             startsWith(github.event.pull_request.head.ref, 'release/v'))
+        ${{ needs.detect.outputs.version != ''
             && 'release-finalize'
             || format('release-finalize-skip-{0}', github.run_id) }}
       cancel-in-progress: false
@@ -90,35 +203,27 @@ jobs:
           # .git/config, where later steps can read it — keep its scope minimal.
           permission-contents: write
 
-      - name: Check out the merge commit
+      - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ needs.detect.outputs.release_sha }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Derive and verify version
+      - name: Verify version state
         id: v
         env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          RELEASE_SHA: ${{ needs.detect.outputs.release_sha }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          version="${HEAD_REF#release/v}"
-          # Same canonical form release-prepare.yml and the PR guard enforce:
-          # plain integer components, no leading zeros. Re-checked here so a
-          # zero-padded branch (release/v1.0.00) can never reach tagging even
-          # when this post-merge backstop is the only guard that ran.
-          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
-          if ! printf '%s' "$version" | grep -Eq "$SEMVER_RE"; then
-            echo "::error::could not derive canonical X.Y.Z (no zero-padded components) from head ref '$HEAD_REF'"; exit 1
-          fi
+          version="$VERSION"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-          # Belt-and-suspenders: the merged content must match the branch name.
+          # Belt-and-suspenders: the checked-out content must carry the version.
           if [ ! -f ".changes/$version.md" ]; then
-            echo "::error::.changes/$version.md missing on the merge commit"; exit 1
+            echo "::error::.changes/$version.md missing on the release commit"; exit 1
           fi
 
           # The existence probes below must distinguish "absent" from
@@ -129,7 +234,7 @@ jobs:
 
           # Tag probe. (git ls-remote --exit-code: 0 = ref found, 2 = no match,
           # anything else = the lookup itself failed.) An existing tag must
-          # point at this PR's merge commit — checked here, before any state
+          # point at the release commit — checked here, before any state
           # is chosen, so no state can succeed on a foreign tag.
           rc=0; git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1 || rc=$?
           case "$rc" in
@@ -140,9 +245,9 @@ jobs:
           if [ "$tag_exists" = true ]; then
             git fetch origin "refs/tags/v$version:refs/tags/v$version"
             tag_commit="$(git rev-parse "v$version^{commit}")"
-            if [ "$tag_commit" != "$MERGE_SHA" ]; then
+            if [ "$tag_commit" != "$RELEASE_SHA" ]; then
               echo "::error::tag v$version already exists but points at $tag_commit," \
-                "not this PR's merge commit ($MERGE_SHA). Refusing to overwrite a foreign tag."
+                "not the release commit ($RELEASE_SHA). Refusing to overwrite a foreign tag."
               exit 1
             fi
           fi
@@ -168,10 +273,10 @@ jobs:
           if [ "$release_exists" = true ]; then
             if [ "$tag_exists" != true ]; then
               echo "::error::release v$version exists but tag v$version does not, so it cannot have been" \
-                "cut from this PR's merge commit ($MERGE_SHA). Resolve manually before re-running."
+                "cut from the release commit ($RELEASE_SHA). Resolve manually before re-running."
               exit 1
             fi
-            echo "::notice::release v$version already exists and its tag matches the merge commit — nothing to finalize."
+            echo "::notice::release v$version already exists and its tag matches the release commit — nothing to finalize."
             echo "do_tag=false" >> "$GITHUB_OUTPUT"
             echo "do_release=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -180,7 +285,7 @@ jobs:
           # State 2: tag exists (verified) but the release is missing ->
           # create the release only.
           if [ "$tag_exists" = true ]; then
-            echo "::notice::tag v$version already exists and matches the merge commit — skipping tag push, creating release."
+            echo "::notice::tag v$version already exists and matches the release commit — skipping tag push, creating release."
             echo "do_tag=false" >> "$GITHUB_OUTPUT"
             echo "do_release=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -217,7 +322,7 @@ jobs:
           echo "do_tag=true" >> "$GITHUB_OUTPUT"
           echo "do_release=true" >> "$GITHUB_OUTPUT"
 
-      # Prove the exact merge commit passes tests and builds before its tag is
+      # Prove the exact release commit passes tests and builds before its tag is
       # published, so a failure here leaves no tag or release behind.
       - name: Set up Go
         if: steps.v.outputs.do_release == 'true'
