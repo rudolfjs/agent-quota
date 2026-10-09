@@ -195,13 +195,17 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
+          client-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          # Mint a least-privilege token (omitting this grants the App's full
+          # Mint a least-privilege token (omitting these grants the App's full
           # installation set): finalize only pushes the tag and creates the
-          # release, both under contents. Checkout persists this token into
-          # .git/config, where later steps can read it — keep its scope minimal.
+          # release, both under contents. GitHub also requires workflows when
+          # the tagged commit's .github/workflows/ differs from main's, which
+          # happens whenever a workflow changed after the release merge.
+          # Checkout persists this token into .git/config, where later steps
+          # can read it — keep its scope minimal.
           permission-contents: write
+          permission-workflows: write
 
       - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
