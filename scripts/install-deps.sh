@@ -75,7 +75,7 @@ install_tools() {
   ok "changie"
 
   info "installing golangci-lint..."
-  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
   ok "golangci-lint"
 }
 

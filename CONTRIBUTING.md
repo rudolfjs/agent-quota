@@ -6,6 +6,8 @@ This repository uses automated checks, `changie`-managed release notes, and PR-d
 
 - Go 1.25+ ([install from go.dev/dl](https://go.dev/dl/))
 
+`go.mod` sets the minimum Go version (`go 1.25.0`) and the toolchain CI and releases build with (`toolchain go1.27.3`). With the default `GOTOOLCHAIN=auto`, the `go` command downloads that toolchain when yours is older.
+
 ## Initial setup
 
 After cloning, run:
@@ -29,7 +31,7 @@ If you prefer to install tools individually:
 ```bash
 go install github.com/evilmartians/lefthook/v2@latest
 go install github.com/miniscruff/changie@v1.25.2
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 make hooks-install
 ```
 
