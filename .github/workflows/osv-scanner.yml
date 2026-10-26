@@ -1,0 +1,44 @@
+# Scans go.mod (modules and the Go standard library version) against the OSV
+# database (osv.dev) with Google's OSV-Scanner reusable workflows and reports
+# findings to Security > Code scanning.
+#
+# - pull_request: scans the PR and its base branch and fails only on
+#   vulnerabilities the PR introduces, annotating them on the diff
+# - push to main / daily schedule / manual run: full scan, so newly published
+#   advisories show up as code scanning alerts without a push
+name: OSV-Scanner
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '41 4 * * *'
+
+permissions: {}
+
+concurrency:
+  group: osv-scanner-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scan:
+    name: Full scan
+    if: github.event_name != 'pull_request'
+    # actions: read is needed by upload-sarif (github/codeql-action#2117)
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+
+  scan-pr:
+    name: New vulnerabilities in PR
+    if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
