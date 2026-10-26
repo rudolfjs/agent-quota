@@ -128,3 +128,9 @@ CI runs on PRs and push-to-main (`.github/workflows/ci.yml`). Three parallel job
 - **go-checks** — matrix of Linux x86_64, macOS Intel, and macOS Apple Silicon: gofmt, go vet, golangci-lint, race tests, CGO-free build, offline installer tests
 - **lefthook** — runs `pre-commit` and `pre-push` hooks in CI
 - **changie** — PRs touching product code require a changie fragment in `.changes/unreleased/` (Dependabot PRs are exempt)
+
+Security scanning runs in separate workflows; CodeQL and OSV-Scanner report to **Security → Code scanning**:
+
+- **CodeQL** (`codeql.yml`) — Go static analysis on PRs, push to `main` and weekly
+- **Dependency review** (`dependency-review.yml`) — PRs to `main`: flags newly added vulnerable dependencies in a PR comment
+- **OSV-Scanner** (`osv-scanner.yml`) — checks `go.mod` modules and the Go standard library version against [osv.dev](https://osv.dev). On PRs to `main` it fails only on vulnerabilities the PR introduces; on push to `main`, daily and manual runs it does a full scan

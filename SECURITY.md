@@ -30,9 +30,10 @@ appropriate.
 
 ## Automated security checks
 
-This repository uses GitHub security tooling, including Dependabot and CodeQL.
-Automated alerts and externally reported vulnerabilities should be handled
-through GitHub's security features rather than public issues.
+This repository uses GitHub security tooling, including Dependabot, CodeQL,
+dependency review and OSV-Scanner. Automated alerts and externally reported
+vulnerabilities should be handled through GitHub's security features rather
+than public issues.
 
 ## Scope
 
