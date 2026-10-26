@@ -6,6 +6,8 @@ This repository uses automated checks, `changie`-managed release notes, and PR-d
 
 - Go 1.25+ ([install from go.dev/dl](https://go.dev/dl/))
 
+`go.mod` sets the minimum Go version (`go 1.25.0`) and the toolchain CI and releases build with (`toolchain go1.27.3`). With the default `GOTOOLCHAIN=auto`, the `go` command downloads that toolchain when yours is older.
+
 ## Initial setup
 
 After cloning, run:

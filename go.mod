@@ -2,6 +2,8 @@ module github.com/rudolfjs/agent-quota
 
 go 1.25.0
 
+toolchain go1.27.3
+
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
@@ -10,7 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/text v0.24.0
+	golang.org/x/text v0.41.0
 )
 
 require (
