@@ -31,7 +31,7 @@ If you prefer to install tools individually:
 ```bash
 go install github.com/evilmartians/lefthook/v2@latest
 go install github.com/miniscruff/changie@v1.25.2
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 make hooks-install
 ```
 
