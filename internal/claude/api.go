@@ -26,13 +26,46 @@ const (
 )
 
 // UsageResponse mirrors the Anthropic OAuth usage API response.
+//
+// The legacy per-window fields are pointers because the API sends null for
+// windows that do not apply to the account (e.g. seven_day_sonnet once the
+// per-model weekly limit moved into Limits).
 type UsageResponse struct {
-	FiveHour       WindowData     `json:"five_hour"`
-	SevenDay       WindowData     `json:"seven_day"`
-	SevenDayOAuth  WindowData     `json:"seven_day_oauth_apps"`
-	SevenDayOpus   WindowData     `json:"seven_day_opus"`
-	SevenDaySonnet WindowData     `json:"seven_day_sonnet"`
+	FiveHour       *WindowData    `json:"five_hour"`
+	SevenDay       *WindowData    `json:"seven_day"`
+	SevenDayOAuth  *WindowData    `json:"seven_day_oauth_apps"`
+	SevenDayOpus   *WindowData    `json:"seven_day_opus"`
+	SevenDaySonnet *WindowData    `json:"seven_day_sonnet"`
 	ExtraUsage     ExtraUsageData `json:"extra_usage"`
+	// Limits is the newer, self-describing list of limits. When present it is
+	// the source of truth for weekly windows, including model-scoped ones.
+	Limits []LimitData `json:"limits"`
+}
+
+// Limit kinds understood by convertUsage.
+const (
+	limitKindWeeklyAll    = "weekly_all"
+	limitKindWeeklyScoped = "weekly_scoped"
+)
+
+// LimitData is one entry of the usage API's limits array.
+type LimitData struct {
+	Kind     string      `json:"kind"`      // e.g. "weekly_all", "weekly_scoped"
+	Group    string      `json:"group"`     // e.g. "weekly"
+	Percent  float64     `json:"percent"`   // 0–100
+	ResetsAt string      `json:"resets_at"` // ISO 8601
+	Scope    *LimitScope `json:"scope"`
+}
+
+// LimitScope narrows a limit to a subset of usage (currently a model).
+type LimitScope struct {
+	Model *LimitScopeModel `json:"model"`
+}
+
+// LimitScopeModel identifies the model a scoped limit applies to.
+type LimitScopeModel struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
 }
 
 // WindowData holds the utilization fraction and reset time for one rate window.
@@ -120,11 +153,11 @@ func (c *APIClient) FetchUsage(ctx context.Context, accessToken string) (*UsageR
 }
 
 func normalizeUsage(usage *UsageResponse) {
-	usage.FiveHour.Utilization = normalizeUtilization(usage.FiveHour.Utilization)
-	usage.SevenDay.Utilization = normalizeUtilization(usage.SevenDay.Utilization)
-	usage.SevenDayOAuth.Utilization = normalizeUtilization(usage.SevenDayOAuth.Utilization)
-	usage.SevenDayOpus.Utilization = normalizeUtilization(usage.SevenDayOpus.Utilization)
-	usage.SevenDaySonnet.Utilization = normalizeUtilization(usage.SevenDaySonnet.Utilization)
+	for _, w := range []*WindowData{usage.FiveHour, usage.SevenDay, usage.SevenDayOAuth, usage.SevenDayOpus, usage.SevenDaySonnet} {
+		if w != nil {
+			w.Utilization = normalizeUtilization(w.Utilization)
+		}
+	}
 	usage.ExtraUsage.Utilization = normalizeUtilization(usage.ExtraUsage.Utilization)
 	if shouldNormalizeExtraUsageAmounts(usage.ExtraUsage) {
 		usage.ExtraUsage.MonthlyLimit /= 100

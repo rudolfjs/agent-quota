@@ -1,0 +1,3 @@
+kind: Fixed
+body: Claude weekly limits now follow the usage API's `limits` list, so the model-specific weekly limit (for example Fable) is shown as `seven_day_<model>` and the stale "Sonnet" row no longer appears when the API reports no Sonnet window.
+time: 2026-11-09T23:00:00.000000000Z

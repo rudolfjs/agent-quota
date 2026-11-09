@@ -599,7 +599,7 @@ func TestQuickViewMenu_filtersStaleClaudeMetricsAndRenamesOpenAICodexWindows(t *
 			Windows: []provider.Window{
 				{Name: "five_hour", Utilization: 0.25, ResetsAt: time.Now().Add(2 * time.Hour)},
 				{Name: "seven_day_oauth_apps", Utilization: 0.25, ResetsAt: time.Now().Add(2 * time.Hour)},
-				{Name: "seven_day_opus", Utilization: 0.25, ResetsAt: time.Now().Add(2 * time.Hour)},
+				{Name: "seven_day_fable", Utilization: 0.25, ResetsAt: time.Now().Add(2 * time.Hour)},
 			},
 			FetchedAt: time.Now(),
 		},
@@ -625,7 +625,10 @@ func TestQuickViewMenu_filtersStaleClaudeMetricsAndRenamesOpenAICodexWindows(t *
 	if !strings.Contains(view, "OpenAI: Session") {
 		t.Fatalf("menuView() = %q, want renamed OpenAI Codex metric as pretty name", view)
 	}
-	if strings.Contains(view, "seven_day_oauth_apps") || strings.Contains(view, "seven_day_opus") {
+	if !strings.Contains(view, "Claude: Fable") {
+		t.Fatalf("menuView() = %q, want model-scoped Claude weekly metric", view)
+	}
+	if strings.Contains(view, "seven_day_oauth_apps") || strings.Contains(view, "Oauth Apps") {
 		t.Fatalf("menuView() = %q, want stale Claude metrics removed", view)
 	}
 }

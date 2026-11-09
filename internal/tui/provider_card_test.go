@@ -310,6 +310,31 @@ func TestRenderProviderCard_openAILightThemeUsesDarkHeadingAndSoftTrack(t *testi
 	}
 }
 
+func TestRenderProviderCard_claudeModelScopedWeeklyWindow(t *testing.T) {
+	r := provider.QuotaResult{
+		Provider: "claude",
+		Status:   "ok",
+		Windows: []provider.Window{
+			{Name: "five_hour", Utilization: 0.35, ResetsAt: time.Now().Add(2 * time.Hour)},
+			{Name: "seven_day", Utilization: 0.05, ResetsAt: time.Now().Add(48 * time.Hour)},
+			{Name: "seven_day_fable", Utilization: 0.09, ResetsAt: time.Now().Add(48 * time.Hour)},
+		},
+		FetchedAt: time.Now(),
+	}
+
+	got := ansi.Strip(RenderProviderCard(r, 60))
+
+	if strings.Count(got, "Weekly Limits") != 1 {
+		t.Errorf("expected one 'Weekly Limits' group header, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Fable") {
+		t.Errorf("expected card to contain model name 'Fable', got:\n%s", got)
+	}
+	if strings.Contains(got, "Sonnet") || strings.Contains(got, "seven_day") {
+		t.Errorf("expected no Sonnet row or raw window name, got:\n%s", got)
+	}
+}
+
 func TestRenderProviderCard_multipleWindows(t *testing.T) {
 	r := provider.QuotaResult{
 		Provider: "claude",
@@ -357,6 +382,7 @@ func TestWindowDuration_knownWindows(t *testing.T) {
 		{"seven_day", 7 * 24 * time.Hour},
 		{"seven_day_sonnet", 7 * 24 * time.Hour},
 		{"seven_day_opus", 7 * 24 * time.Hour},
+		{"seven_day_fable", 7 * 24 * time.Hour},
 		{"codex_spark_five_hour", 5 * time.Hour},
 		{"codex_spark_seven_day", 7 * 24 * time.Hour},
 		{"unknown_window", 0},

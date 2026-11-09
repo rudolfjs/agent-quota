@@ -314,10 +314,11 @@ func windowDuration(name string) time.Duration {
 			break
 		}
 	}
-	switch base {
-	case "five_hour":
+	switch {
+	case base == "five_hour":
 		return 5 * time.Hour
-	case "seven_day", "seven_day_sonnet", "seven_day_opus", "seven_day_oauth_apps":
+	// seven_day_<model> covers Claude's model-scoped weekly windows.
+	case base == "seven_day", strings.HasPrefix(base, "seven_day_"):
 		return 7 * 24 * time.Hour
 	default:
 		return 0
