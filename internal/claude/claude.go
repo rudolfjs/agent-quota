@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/rudolfjs/agent-quota/internal/credential"
@@ -210,11 +212,7 @@ func convertUsage(creds OAuthCredentials, usage *UsageResponse) provider.QuotaRe
 		FetchedAt: time.Now(),
 	}
 
-	result.Windows = []provider.Window{
-		parseWindow("five_hour", usage.FiveHour),
-		parseWindow("seven_day", usage.SevenDay),
-		parseWindow("seven_day_sonnet", usage.SevenDaySonnet),
-	}
+	result.Windows = convertWindows(usage)
 
 	if usage.ExtraUsage.IsEnabled {
 		result.ExtraUsage = &provider.ExtraUsage{
@@ -228,16 +226,100 @@ func convertUsage(creds OAuthCredentials, usage *UsageResponse) provider.QuotaRe
 	return result
 }
 
-// parseWindow converts a WindowData to a provider.Window, parsing the ISO 8601 reset time.
-func parseWindow(name string, wd WindowData) provider.Window {
+// convertWindows builds the window list: the session window, the all-models
+// weekly window, then any model-scoped weekly windows.
+//
+// Weekly windows come from the limits array when the API provides it. The
+// legacy seven_day* fields are only used as a fallback, and only when non-null,
+// so a window the API no longer reports is not shown as a phantom 0% row.
+func convertWindows(usage *UsageResponse) []provider.Window {
+	// The session window is always listed; a null five_hour means no session
+	// is in progress, which reads as 0% used.
+	var fiveHour WindowData
+	if usage.FiveHour != nil {
+		fiveHour = *usage.FiveHour
+	}
+	windows := []provider.Window{newWindow("five_hour", fiveHour.Utilization, fiveHour.ResetsAt)}
+
+	var weeklyAll *provider.Window
+	var scoped []provider.Window
+	for _, l := range usage.Limits {
+		switch l.Kind {
+		case limitKindWeeklyAll:
+			if weeklyAll == nil {
+				w := newWindow("seven_day", percentToUtilization(l.Percent), l.ResetsAt)
+				weeklyAll = &w
+			}
+		case limitKindWeeklyScoped:
+			slug := scopeSlug(l.Scope)
+			if slug == "" {
+				slog.Debug("skipping scoped weekly limit without a model name")
+				continue
+			}
+			name := "seven_day_" + slug
+			if slices.ContainsFunc(scoped, func(w provider.Window) bool { return w.Name == name }) {
+				continue
+			}
+			scoped = append(scoped, newWindow(name, percentToUtilization(l.Percent), l.ResetsAt))
+		default:
+			slog.Debug("ignoring unrecognised usage limit", "kind", l.Kind)
+		}
+	}
+
+	if weeklyAll == nil && usage.SevenDay != nil {
+		w := newWindow("seven_day", usage.SevenDay.Utilization, usage.SevenDay.ResetsAt)
+		weeklyAll = &w
+	}
+	if weeklyAll != nil {
+		windows = append(windows, *weeklyAll)
+	}
+	if len(scoped) == 0 && usage.SevenDaySonnet != nil {
+		scoped = append(scoped, newWindow("seven_day_sonnet", usage.SevenDaySonnet.Utilization, usage.SevenDaySonnet.ResetsAt))
+	}
+	return append(windows, scoped...)
+}
+
+// scopeSlug turns a limit scope's model name into a window-name suffix
+// ("Fable" → "fable", "Opus 5" → "opus_5"). Returns "" when there is no model.
+func scopeSlug(scope *LimitScope) string {
+	if scope == nil || scope.Model == nil {
+		return ""
+	}
+	name := scope.Model.DisplayName
+	if strings.TrimSpace(name) == "" {
+		name = scope.Model.ID
+	}
+	var sb strings.Builder
+	pendingSep := false
+	for _, r := range strings.ToLower(name) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if pendingSep && sb.Len() > 0 {
+				sb.WriteByte('_')
+			}
+			pendingSep = false
+			sb.WriteRune(r)
+			continue
+		}
+		pendingSep = true
+	}
+	return sb.String()
+}
+
+// percentToUtilization converts a 0–100 percentage to a clamped 0–1 fraction.
+func percentToUtilization(percent float64) float64 {
+	return min(max(percent/100, 0), 1)
+}
+
+// newWindow builds a provider.Window, parsing the ISO 8601 reset time.
+func newWindow(name string, utilization float64, resetsAt string) provider.Window {
 	w := provider.Window{
 		Name:        name,
-		Utilization: wd.Utilization,
+		Utilization: utilization,
 	}
-	if wd.ResetsAt != "" {
-		t, err := time.Parse(time.RFC3339, wd.ResetsAt)
+	if resetsAt != "" {
+		t, err := time.Parse(time.RFC3339, resetsAt)
 		if err != nil {
-			slog.Debug("failed to parse resets_at", "window", name, "value", wd.ResetsAt, "error", err)
+			slog.Debug("failed to parse resets_at", "window", name, "value", resetsAt, "error", err)
 		} else {
 			w.ResetsAt = t
 		}

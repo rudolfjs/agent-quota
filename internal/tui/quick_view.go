@@ -217,6 +217,13 @@ func metricDisplayInfo(providerName, metricName string) metricDisplay {
 		return d
 	}
 	prov := strings.ToLower(strings.TrimSpace(providerName))
+	// Claude model-scoped weekly windows: seven_day_<model>, where the model
+	// comes from the API (e.g. seven_day_fable), so new models need no mapping.
+	if prov == "claude" {
+		if model, ok := strings.CutPrefix(normalized, "seven_day_"); ok && model != "" {
+			return metricDisplay{Group: "Weekly Limits", Name: prettyRawName(model)}
+		}
+	}
 	// OpenAI prefixed windows: e.g. codex_spark_five_hour, code_review_seven_day.
 	// The prefix becomes the group header; the base becomes the metric name.
 	if prov == "openai" {
@@ -286,8 +293,8 @@ func isQuickViewMetricSupported(providerName, metricName string) bool {
 	metricName = strings.TrimSpace(metricName)
 
 	if providerName == "claude" {
-		switch metricName {
-		case "seven_day_oauth_apps", "seven_day_opus":
+		// Stale metric from old cached results; never a model-scoped limit.
+		if metricName == "seven_day_oauth_apps" {
 			return false
 		}
 	}
