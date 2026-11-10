@@ -61,6 +61,20 @@ jobs:
       - name: Verify installer script is executable
         run: test -x scripts/install.sh
 
+  # Reports the matrix result under the stable name required by the main
+  # ruleset, so changing the runner list cannot strand a required check.
+  # always() is needed because GitHub treats a skipped required check as passing.
+  go-checks-result:
+    name: Go checks
+    needs: go-checks
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all matrix jobs to pass
+        env:
+          RESULT: ${{ needs.go-checks.result }}
+        run: test "$RESULT" = "success"
+
   lefthook:
     name: Lefthook
     runs-on: ubuntu-latest
